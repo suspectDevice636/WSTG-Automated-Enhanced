@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  wstg-vulnerable-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wstg-vulnerable-app
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    volumes:
+      - ./app.py:/app/app.py
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

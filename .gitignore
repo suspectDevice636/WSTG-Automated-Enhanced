@@ -1,0 +1,11 @@
+# Scan output directories
+wstg-scan-*/
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
