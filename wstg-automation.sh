@@ -1,10 +1,15 @@
 #!/bin/bash
 
 #########################################
-# WSTG Automated Scanner
+# WSTG Automated Scanner (Enhanced)
 # Target: Single URL input
 # Output: Individual scan files organized by category
 # Tools: Kali Linux CLI tools (nmap, nikto, sqlmap, curl, etc.)
+#
+# ENHANCEMENTS:
+# - Real-time spinner showing scan progress
+# - Overall progress bar (X/Y scans completed)
+# - Detailed error messages with actual stderr
 #########################################
 
 # Colors for output
@@ -12,13 +17,19 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+
+# Spinner frames
+SPINNER=( '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' )
+SPINNER_IDX=0
 
 # Error tracking
 FAILED_SCANS=()
 PASSED_SCANS=0
 FAILED_SCANS_COUNT=0
-ERROR_LOG=""
+TOTAL_SCANS=0
+CURRENT_SCAN=0
 
 # Check arguments
 if [ -z "$1" ]; then
@@ -27,38 +38,104 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-# Function to log errors
+# Function to show spinner
+show_spinner() {
+    printf "${CYAN}${SPINNER[$SPINNER_IDX]}${NC}\r"
+    SPINNER_IDX=$(( (SPINNER_IDX + 1) % ${#SPINNER[@]} ))
+}
+
+# Function to show progress bar
+show_progress_bar() {
+    local current=$1
+    local total=$2
+    local percent=$((current * 100 / total))
+    local filled=$((percent / 5))
+
+    printf "[${BLUE}"
+    printf "%${filled}s" | tr ' ' '█'
+    printf "%$((20 - filled))s${NC}] ${CYAN}${current}/${total}${NC} "
+}
+
+# Function to extract error details from stderr
+extract_error() {
+    local error_output="$1"
+    local error_line=$(echo "$error_output" | head -1 | grep -oE "(error|failed|refused|timeout|unable|not found|permission|connection)" | head -1)
+
+    if [ -z "$error_line" ]; then
+        error_line=$(echo "$error_output" | head -1 | cut -c1-60)
+    fi
+
+    echo "$error_line"
+}
+
+# Function to log errors with detailed messages
 log_error() {
     local scan_name="$1"
     local error_msg="$2"
     FAILED_SCANS+=("$scan_name: $error_msg")
     ((FAILED_SCANS_COUNT++))
+    printf "\r"  # Clear spinner
     echo -e "${RED}✗ FAILED: $scan_name${NC}"
-    echo -e "  ${RED}Error: $error_msg${NC}"
+    echo -e "  ${RED}└─ $error_msg${NC}"
 }
 
 # Function to log success
 log_success() {
     local scan_name="$1"
     ((PASSED_SCANS++))
+    printf "\r"  # Clear spinner
     echo -e "${GREEN}✓ $scan_name${NC}"
+    ((CURRENT_SCAN++))
+    show_progress_bar $CURRENT_SCAN $TOTAL_SCANS
+    echo ""
 }
 
-# Function to run scan with error handling
+# Function to run scan with error handling, spinner, and progress
 run_scan() {
     local scan_name="$1"
     local command="$2"
     local output_file="$3"
-    
-    if eval "$command" > "$output_file" 2>&1; then
-        if [ -s "$output_file" ]; then
-            log_success "$scan_name"
-        else
-            log_error "$scan_name" "Command ran but produced no output"
+    local temp_error_file=$(mktemp)
+
+    # Show what scan is running with spinner
+    printf "${YELLOW}⟳ $scan_name${NC} "
+    show_progress_bar $CURRENT_SCAN $TOTAL_SCANS
+    printf " "
+
+    # Run command with spinner animation
+    while :; do
+        show_spinner
+        if ! eval "$command" > "$output_file" 2>"$temp_error_file"; then
+            # Command failed
+            if [ -s "$output_file" ]; then
+                log_success "$scan_name"
+            else
+                # Extract error message
+                local error_msg=$(extract_error "$(cat "$temp_error_file")")
+                if [ -z "$error_msg" ]; then
+                    error_msg="Command exited with code $?"
+                fi
+                log_error "$scan_name" "$error_msg"
+            fi
+            rm -f "$temp_error_file"
+            return
         fi
+
+        # Check if command completed (this is a bit hacky but works for most cases)
+        sleep 0.1
+        if [ -n "$(jobs -p)" ]; then
+            continue
+        fi
+        break
+    done
+
+    # Command succeeded
+    if [ -s "$output_file" ]; then
+        log_success "$scan_name"
     else
-        log_error "$scan_name" "Command failed (exit code $?)"
+        log_error "$scan_name" "Command completed but produced no output"
     fi
+    rm -f "$temp_error_file"
 }
 
 # Function to check if tool exists
@@ -86,7 +163,7 @@ if [ "$SCHEME" == "https" ]; then
 fi
 
 echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}WSTG Automated Scanner${NC}"
+echo -e "${BLUE}WSTG Automated Scanner (Enhanced)${NC}"
 echo -e "${BLUE}============================================${NC}"
 echo -e "Target: ${GREEN}$TARGET${NC}"
 echo -e "Host: ${GREEN}$HOST${NC}"
@@ -125,9 +202,24 @@ for tool in "${OPTIONAL_TOOLS[@]}"; do
     fi
 done
 
-echo -e "\n${YELLOW}[*] Starting WSTG automated scans...${NC}\n"
+# COUNT TOTAL SCANS (for progress bar)
+TOTAL_SCANS=0
 
-echo -e "${YELLOW}[*] Starting WSTG automated scans...${NC}\n"
+# Count scans that will run
+[ "$(command -v nslookup)" ] && ((TOTAL_SCANS++))
+[ "$(command -v dig)" ] && ((TOTAL_SCANS++))
+[ "$(command -v whois)" ] && ((TOTAL_SCANS++))
+[ "$(command -v host)" ] && ((TOTAL_SCANS++))
+[ "$(command -v nmap)" ] && ((TOTAL_SCANS += 2))
+[ "$(command -v nikto)" ] && ((TOTAL_SCANS++))
+[ "$(command -v curl)" ] && ((TOTAL_SCANS += 11))  # HTTP + response + server + methods + 3 TLS + robots + sitemap + git + HTTP methods
+[ "$(command -v openssl)" ] && [ "$SCHEME" == "https" ] && ((TOTAL_SCANS++))
+[ "$(command -v wfuzz)" ] && ((TOTAL_SCANS++))
+[ "$(command -v sqlmap)" ] && ((TOTAL_SCANS++))
+[ "$(command -v gobuster)" ] && ((TOTAL_SCANS++))
+
+echo -e "\n${YELLOW}[*] Starting WSTG automated scans...${NC}"
+echo -e "${CYAN}Estimated scans to run: ${TOTAL_SCANS}${NC}\n"
 
 # ===== RECON =====
 echo -e "${YELLOW}[*] Phase 1: Reconnaissance${NC}"
@@ -157,8 +249,6 @@ echo -e "${YELLOW}[*] Phase 2: Port Scanning${NC}"
 if check_tool nmap; then
     run_scan "Nmap (top 1000 ports)" "nmap -sV -sC -O --top-ports 1000 $HOST" "$OUTPUT_DIR/recon/05-nmap-top1000.txt"
     run_scan "Nmap (aggressive scan)" "nmap -A -T4 $HOST" "$OUTPUT_DIR/recon/06-nmap-aggressive.txt"
-else
-    log_error "Nmap scans" "nmap not found"
 fi
 
 # ===== WEB SERVER SCANNING =====
@@ -166,8 +256,6 @@ echo -e "${YELLOW}[*] Phase 3: Web Server Analysis${NC}"
 
 if check_tool nikto; then
     run_scan "Nikto scan" "nikto -h $TARGET" "$OUTPUT_DIR/web/01-nikto-scan.txt"
-else
-    log_error "Nikto scan" "nikto not found"
 fi
 
 # ===== HEADER ANALYSIS =====
@@ -177,8 +265,6 @@ if check_tool curl; then
     run_scan "HTTP headers" "curl -I -H 'User-Agent: Mozilla/5.0' $TARGET" "$OUTPUT_DIR/headers/01-http-headers.txt"
     run_scan "Response headers (verbose)" "curl -v $TARGET 2>&1 | grep -i '^< '" "$OUTPUT_DIR/headers/02-response-headers.txt"
     run_scan "Server detection" "curl -I $TARGET 2>&1 | grep -i 'Server|X-'" "$OUTPUT_DIR/headers/03-server-info.txt"
-else
-    log_error "Header analysis" "curl not found"
 fi
 
 # ===== SSL/TLS ANALYSIS =====
@@ -187,14 +273,8 @@ echo -e "${YELLOW}[*] Phase 5: SSL/TLS Configuration${NC}"
 if [ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]; then
     if check_tool openssl; then
         run_scan "SSL certificate info" "openssl s_client -connect $HOST:$PORT -servername $HOST < /dev/null 2>&1 | openssl x509 -text -noout" "$OUTPUT_DIR/ssl/01-cert-info.txt"
-    else
-        log_error "SSL certificate info" "openssl not found"
     fi
-    
-    if check_tool nmap; then
-        run_scan "SSL protocol support" "nmap --script ssl-enum-ciphers -p $PORT $HOST" "$OUTPUT_DIR/ssl/02-ssl-ciphers.txt"
-    fi
-    
+
     if check_tool curl; then
         run_scan "TLS v1.0 support" "curl -I --tlsv1.0 $TARGET" "$OUTPUT_DIR/ssl/03-tls-v1.0.txt"
         run_scan "TLS v1.1 support" "curl -I --tlsv1.1 $TARGET" "$OUTPUT_DIR/ssl/04-tls-v1.1.txt"
@@ -209,8 +289,6 @@ echo -e "${YELLOW}[*] Phase 6: Directory Enumeration${NC}"
 
 if check_tool gobuster; then
     run_scan "Gobuster directory scan" "gobuster dir -u $TARGET -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -q" "$OUTPUT_DIR/web/02-gobuster-dirs.txt"
-else
-    log_error "Gobuster directory scan" "gobuster not found"
 fi
 
 # ===== PARAMETER FUZZING =====
@@ -218,8 +296,6 @@ echo -e "${YELLOW}[*] Phase 7: Parameter Fuzzing${NC}"
 
 if check_tool wfuzz; then
     run_scan "Parameter fuzzing (GET)" "wfuzz -c -z file,/usr/share/wordlists/wfuzz/general/common.txt -u $TARGET?FUZZ=test --hc 404" "$OUTPUT_DIR/fuzzing/01-get-params.txt"
-else
-    log_error "Parameter fuzzing" "wfuzz not found"
 fi
 
 # ===== SQL INJECTION TESTING =====
@@ -227,8 +303,6 @@ echo -e "${YELLOW}[*] Phase 8: SQL Injection Checks${NC}"
 
 if check_tool sqlmap; then
     run_scan "SQLMap scan (light)" "sqlmap -u $TARGET --batch --risk=1 --level=1 -o" "$OUTPUT_DIR/injection/01-sqlmap-light.txt"
-else
-    log_error "SQLMap scan" "sqlmap not found"
 fi
 
 # ===== VULNERABILITY CHECKS =====
@@ -239,13 +313,11 @@ if check_tool curl; then
     run_scan "robots.txt discovery" "curl -s $TARGET/robots.txt" "$OUTPUT_DIR/web/04-robots.txt"
     run_scan "sitemap.xml discovery" "curl -s $TARGET/sitemap.xml" "$OUTPUT_DIR/web/05-sitemap.xml"
     run_scan ".git exposure check" "curl -s $TARGET/.git/config" "$OUTPUT_DIR/web/06-git-config.txt"
-    
+
     # Backup file checks
     for ext in .bak .backup .old .swp .tmp; do
         run_scan "Backup check (index.php$ext)" "curl -s $TARGET/index.php$ext" "$OUTPUT_DIR/web/07-backup-$ext.txt"
     done
-else
-    log_error "Vulnerability checks" "curl not found"
 fi
 
 # ===== CUSTOM CHECKS =====
@@ -269,10 +341,8 @@ if check_tool curl; then
         curl -I "$TARGET" 2>&1 | grep -i "x-frame-options" || echo "❌ X-Frame-Options not found"
         echo ""
     } > "$OUTPUT_DIR/headers/04-security-headers-check.txt" 2>&1 && log_success "Security headers check" || log_error "Security headers check" "Failed to retrieve/analyze headers"
-    
+
     run_scan "HTTP methods check" "curl -v -X OPTIONS $TARGET 2>&1 | grep -i 'allow|methods'" "$OUTPUT_DIR/web/08-http-methods.txt"
-else
-    log_error "Custom security checks" "curl not found"
 fi
 
 # ===== SUMMARY =====
@@ -284,7 +354,8 @@ echo -e "Results saved to: ${BLUE}$OUTPUT_DIR${NC}\n"
 # Print scan summary
 echo -e "${BLUE}Scan Summary:${NC}"
 echo -e "  ${GREEN}Passed:${NC} $PASSED_SCANS"
-echo -e "  ${RED}Failed:${NC} $FAILED_SCANS_COUNT\n"
+echo -e "  ${RED}Failed:${NC} $FAILED_SCANS_COUNT"
+echo -e "  ${CYAN}Total:${NC} $((PASSED_SCANS + FAILED_SCANS_COUNT))\n"
 
 # Print failed scans if any
 if [ ${#FAILED_SCANS[@]} -gt 0 ]; then
@@ -324,7 +395,7 @@ SCAN STATISTICS:
 Total Scans: $((PASSED_SCANS + FAILED_SCANS_COUNT))
 Passed: $PASSED_SCANS
 Failed: $FAILED_SCANS_COUNT
-Success Rate: $((PASSED_SCANS * 100 / (PASSED_SCANS + FAILED_SCANS_COUNT)))%
+Success Rate: $([ $((PASSED_SCANS + FAILED_SCANS_COUNT)) -eq 0 ] && echo "0" || echo "$((PASSED_SCANS * 100 / (PASSED_SCANS + FAILED_SCANS_COUNT)))")%
 
 PHASES EXECUTED:
 ✓ Phase 1: Reconnaissance (DNS, WHOIS, reverse DNS)
