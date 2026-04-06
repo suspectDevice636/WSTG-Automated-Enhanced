@@ -173,13 +173,28 @@ The WSTG script should detect:
 
 ```
 WSTG-VulnerableApp/
-├── app.py                # Main Flask application with vulnerabilities
-├── requirements.txt      # Python dependencies
-├── Dockerfile           # Docker image configuration
-├── docker-compose.yml   # Easy orchestration with docker-compose
-├── README.md            # This file
-└── data/                # (Optional) Data storage
+├── app.py                   # Main Flask application with vulnerabilities
+├── requirements.txt         # Python dependencies
+├── Dockerfile              # Docker image configuration
+├── docker-compose.yml      # Easy orchestration with docker-compose
+├── README.md               # Original documentation
+├── QUICK_START.md          # Quick start guide
+├── UPGRADE_SUMMARY.md      # UI upgrade details
+├── DOCKER_DEPLOYMENT.md    # Docker deployment guide
+├── DEPLOYMENT_GUIDE.md     # Comprehensive deployment guide
+├── templates/              # Professional HTML templates (upgraded)
+├── static/                 # CSS and static files (upgraded)
+├── data/                   # (Optional) Data storage
+└── public/                 # (Optional) Public files
 ```
+
+## ✨ Latest Updates (April 2026)
+
+The vulnerable app has been upgraded with:
+- **Professional UI** - 6 modern HTML templates with responsive design
+- **Enhanced Docker** - Fully containerized with docker-compose support
+- **Comprehensive Docs** - Multiple deployment guides and quick start guides
+- **All Vulnerabilities Preserved** - All 9 security vulnerabilities intact for testing
 
 ---
 
