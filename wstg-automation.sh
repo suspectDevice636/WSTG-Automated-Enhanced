@@ -20,8 +20,8 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Spinner frames
-SPINNER=( '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' )
+# Spinner frames - using simple ASCII characters
+SPINNER=( '▁' '▃' '▄' '▅' '▆' '▇' '█' )
 SPINNER_IDX=0
 
 # Error tracking
@@ -40,7 +40,7 @@ fi
 
 # Function to show spinner
 show_spinner() {
-    printf "${CYAN}${SPINNER[$SPINNER_IDX]}${NC}\r"
+    printf "${CYAN}${SPINNER[$SPINNER_IDX]}${NC}\r" >&1
     SPINNER_IDX=$(( (SPINNER_IDX + 1) % ${#SPINNER[@]} ))
 }
 
@@ -320,22 +320,17 @@ echo -e "${YELLOW}[*] Phase 10: Additional Security Checks${NC}"
 
 if check_tool curl; then
     # Security headers check
-    {
-        echo "=== Security Header Checks ==="
-        echo ""
-        echo "Testing: Strict-Transport-Security (HSTS)"
-        curl -I "$TARGET" 2>&1 | grep -i "strict-transport\|hsts" || echo "❌ HSTS not found"
-        echo ""
-        echo "Testing: Content-Security-Policy (CSP)"
-        curl -I "$TARGET" 2>&1 | grep -i "content-security-policy" || echo "❌ CSP not found"
-        echo ""
-        echo "Testing: X-Content-Type-Options"
-        curl -I "$TARGET" 2>&1 | grep -i "x-content-type-options" || echo "❌ X-Content-Type-Options not found"
-        echo ""
-        echo "Testing: X-Frame-Options"
-        curl -I "$TARGET" 2>&1 | grep -i "x-frame-options" || echo "❌ X-Frame-Options not found"
-        echo ""
-    } > "$OUTPUT_DIR/headers/04-security-headers-check.txt" 2>&1 && log_success "Security headers check" || log_error "Security headers check" "Failed to retrieve/analyze headers"
+    run_scan "Security headers check" "{
+        echo '=== Security Header Checks ==='; echo '';
+        echo 'Testing: Strict-Transport-Security (HSTS)';
+        curl -I '$TARGET' 2>&1 | grep -i 'strict-transport|hsts' || echo '❌ HSTS not found';
+        echo ''; echo 'Testing: Content-Security-Policy (CSP)';
+        curl -I '$TARGET' 2>&1 | grep -i 'content-security-policy' || echo '❌ CSP not found';
+        echo ''; echo 'Testing: X-Content-Type-Options';
+        curl -I '$TARGET' 2>&1 | grep -i 'x-content-type-options' || echo '❌ X-Content-Type-Options not found';
+        echo ''; echo 'Testing: X-Frame-Options';
+        curl -I '$TARGET' 2>&1 | grep -i 'x-frame-options' || echo '❌ X-Frame-Options not found'; echo '';
+    }" "$OUTPUT_DIR/headers/04-security-headers-check.txt"
 
     run_scan "HTTP methods check" "curl -v -X OPTIONS $TARGET 2>&1 | grep -i 'allow|methods'" "$OUTPUT_DIR/web/08-http-methods.txt"
 fi
