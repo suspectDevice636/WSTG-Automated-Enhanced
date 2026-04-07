@@ -38,6 +38,19 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
+# Cleanup function to kill all child processes on exit
+cleanup() {
+    echo -e "\n${YELLOW}[!] Interrupt received, killing all background scans...${NC}"
+    # Kill all child processes
+    jobs -p | xargs -r kill -9 2>/dev/null
+    wait 2>/dev/null
+    echo -e "${RED}[!] Scan cancelled${NC}"
+    exit 130
+}
+
+# Set trap to catch Ctrl+C (SIGINT) and termination (SIGTERM)
+trap cleanup SIGINT SIGTERM
+
 # Function to show spinner
 show_spinner() {
     printf "${CYAN}${SPINNER[$SPINNER_IDX]}${NC}\r" >&1
