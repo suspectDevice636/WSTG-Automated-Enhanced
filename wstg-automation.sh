@@ -12,6 +12,32 @@
 # - Detailed error messages with actual stderr
 #########################################
 
+#########################################
+# ⚠️  IMPORTANT LEGAL NOTICE ⚠️
+#########################################
+# THIS SCRIPT IS FOR AUTHORIZED SECURITY TESTING ONLY
+#
+# ❌ DO NOT use this script to scan any systems without explicit,
+#    written authorization from the system owner.
+#
+# ⚠️  UNAUTHORIZED ACCESS is ILLEGAL and may result in:
+#    - Criminal prosecution
+#    - Civil liability
+#    - Imprisonment
+#    - Substantial fines
+#
+# 📖 EDUCATIONAL USE ONLY
+#    This tool is designed for learning and authorized penetration testing
+#    in controlled environments with proper authorization.
+#
+# ✅ BEFORE RUNNING:
+#    1. Verify you have written permission to test the target
+#    2. Ensure the target is within your authorized scope
+#    3. Review your local laws regarding security testing
+#    4. Follow responsible disclosure practices
+#
+#########################################
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -205,12 +231,12 @@ echo -e "Output: ${GREEN}$OUTPUT_DIR${NC}"
 echo -e "${BLUE}============================================${NC}\n"
 
 # Create output directory structure
-mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,injection,headers,fuzzing,logs}
+mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,injection,headers,fuzzing,nmap,logs}
 
 # Check for required tools
 echo -e "${YELLOW}[*] Checking for required tools...${NC}\n"
 CRITICAL_TOOLS=(curl nmap)
-OPTIONAL_TOOLS=(nikto gobuster wfuzz sqlmap dig whois host openssl)
+OPTIONAL_TOOLS=(nikto gobuster wfuzz sqlmap dig whois host openssl whatweb dirb)
 MISSING_CRITICAL=0
 
 for tool in "${CRITICAL_TOOLS[@]}"; do
@@ -243,9 +269,11 @@ TOTAL_SCANS=0
 [ "$(command -v dig)" ] && ((TOTAL_SCANS++))
 [ "$(command -v whois)" ] && ((TOTAL_SCANS++))
 [ "$(command -v host)" ] && ((TOTAL_SCANS++))
-[ "$(command -v nmap)" ] && ((TOTAL_SCANS += 2))
+[ "$(command -v nmap)" ] && ((TOTAL_SCANS += 2))  # Service detection + HTTP methods
 [ "$(command -v nikto)" ] && ((TOTAL_SCANS++))
-[ "$(command -v curl)" ] && ((TOTAL_SCANS += 11))  # HTTP + response + server + methods + 3 TLS + robots + sitemap + git + HTTP methods
+[ "$(command -v whatweb)" ] && ((TOTAL_SCANS++))
+[ "$(command -v dirb)" ] && ((TOTAL_SCANS++))
+[ "$(command -v curl)" ] && ((TOTAL_SCANS += 11))  # HTTP + response + server + 3 TLS + robots + sitemap + git + backup checks + security headers
 [ "$(command -v openssl)" ] && [ "$SCHEME" == "https" ] && ((TOTAL_SCANS++))
 [ "$(command -v wfuzz)" ] && ((TOTAL_SCANS++))
 [ "$(command -v sqlmap)" ] && ((TOTAL_SCANS++))
@@ -280,8 +308,8 @@ fi
 echo -e "${YELLOW}[*] Phase 2: Port Scanning${NC}"
 
 if check_tool nmap; then
-    run_scan "Nmap (top 1000 ports)" "nmap -sV -sC -O --top-ports 1000 $HOST" "$OUTPUT_DIR/recon/05-nmap-top1000.txt"
-    run_scan "Nmap (aggressive scan)" "nmap -A -T4 $HOST" "$OUTPUT_DIR/recon/06-nmap-aggressive.txt"
+    run_scan "Nmap (service detection)" "nmap -sV -Pn -oA $OUTPUT_DIR/nmap/01-nmap-service $HOST 2>&1 | tee $OUTPUT_DIR/nmap/01-nmap-service.txt" "$OUTPUT_DIR/nmap/01-nmap-service.txt"
+    run_scan "Nmap (HTTP methods)" "nmap -sV -Pn --script http-methods -oA $OUTPUT_DIR/nmap/02-nmap-http-methods $HOST 2>&1 | tee $OUTPUT_DIR/nmap/02-nmap-http-methods.txt" "$OUTPUT_DIR/nmap/02-nmap-http-methods.txt"
 fi
 
 # ===== WEB SERVER SCANNING =====
@@ -289,6 +317,14 @@ echo -e "${YELLOW}[*] Phase 3: Web Server Analysis${NC}"
 
 if check_tool nikto; then
     run_scan "Nikto scan" "nikto -h $TARGET" "$OUTPUT_DIR/web/01-nikto-scan.txt"
+fi
+
+if check_tool whatweb; then
+    run_scan "WhatWeb scan" "whatweb -v $TARGET" "$OUTPUT_DIR/web/02-whatweb-scan.txt"
+fi
+
+if check_tool dirb; then
+    run_scan "Dirb IIS scan" "dirb $TARGET /usr/share/wordlists/wfuzz/vulns/iis.txt -o $OUTPUT_DIR/web/03-dirb-iis.txt 2>&1" "$OUTPUT_DIR/web/03-dirb-iis.txt"
 fi
 
 # ===== HEADER ANALYSIS =====
@@ -369,8 +405,6 @@ if check_tool curl; then
         echo ''; echo 'Testing: X-Frame-Options';
         curl -I '$TARGET' 2>&1 | grep -i 'x-frame-options' || echo '❌ X-Frame-Options not found'; echo '';
     }" "$OUTPUT_DIR/headers/04-security-headers-check.txt"
-
-    run_scan "HTTP methods check" "curl -v -X OPTIONS $TARGET 2>&1 | grep -i 'allow|methods'" "$OUTPUT_DIR/web/08-http-methods.txt"
 fi
 
 # ===== SUMMARY =====
@@ -395,8 +429,9 @@ if [ ${#FAILED_SCANS[@]} -gt 0 ]; then
 fi
 
 echo -e "${YELLOW}Output Structure:${NC}"
-echo -e "  ${BLUE}recon/${NC}       - DNS, WHOIS, Nmap results"
-echo -e "  ${BLUE}web/${NC}         - Web server, directories, backups"
+echo -e "  ${BLUE}recon/${NC}       - DNS, WHOIS results"
+echo -e "  ${BLUE}nmap/${NC}        - Nmap service detection and HTTP methods (all formats)"
+echo -e "  ${BLUE}web/${NC}         - Web server (Nikto, WhatWeb, Dirb), directories, backups"
 echo -e "  ${BLUE}ssl/${NC}         - Certificate and TLS configuration"
 echo -e "  ${BLUE}headers/${NC}     - HTTP headers and security checks"
 echo -e "  ${BLUE}injection/${NC}   - SQL injection and injection testing"
@@ -427,15 +462,15 @@ Success Rate: $([ $((PASSED_SCANS + FAILED_SCANS_COUNT)) -eq 0 ] && echo "0" || 
 
 PHASES EXECUTED:
 ✓ Phase 1: Reconnaissance (DNS, WHOIS, reverse DNS)
-✓ Phase 2: Port Scanning (Nmap top 1000 + aggressive)
-✓ Phase 3: Web Server Analysis (Nikto)
+✓ Phase 2: Port Scanning (Nmap service detection, HTTP methods)
+✓ Phase 3: Web Server Analysis (Nikto, WhatWeb, Dirb IIS)
 ✓ Phase 4: Header Analysis (HTTP headers, security headers)
 ✓ Phase 5: SSL/TLS Configuration (Certificates, protocols)
 ✓ Phase 6: Directory Enumeration (Gobuster)
 ✓ Phase 7: Parameter Fuzzing (wfuzz)
 ✓ Phase 8: SQL Injection (SQLMap light)
 ✓ Phase 9: Common Vulnerability Patterns (robots.txt, .git, backups)
-✓ Phase 10: Additional Security Checks (HTTP methods, headers)
+✓ Phase 10: Additional Security Checks (security headers)
 
 EOF
 
