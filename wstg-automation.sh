@@ -20,8 +20,8 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Spinner frames - using simple ASCII characters
-SPINNER=( '▁' '▃' '▄' '▅' '▆' '▇' '█' )
+# Spinner frames - pure ASCII for maximum compatibility
+SPINNER=( '/' '-' '\' '|' )
 SPINNER_IDX=0
 
 # Error tracking
