@@ -102,38 +102,33 @@ run_scan() {
     show_progress_bar $CURRENT_SCAN $TOTAL_SCANS
     printf " "
 
-    # Run command with spinner animation
-    while :; do
-        show_spinner
-        if ! eval "$command" > "$output_file" 2>"$temp_error_file"; then
-            # Command failed
-            if [ -s "$output_file" ]; then
-                log_success "$scan_name"
-            else
-                # Extract error message
-                local error_msg=$(extract_error "$(cat "$temp_error_file")")
-                if [ -z "$error_msg" ]; then
-                    error_msg="Command exited with code $?"
-                fi
-                log_error "$scan_name" "$error_msg"
-            fi
-            rm -f "$temp_error_file"
-            return
-        fi
+    # Run command in background
+    eval "$command" > "$output_file" 2>"$temp_error_file" &
+    local cmd_pid=$!
 
-        # Check if command completed (this is a bit hacky but works for most cases)
+    # Spin while command runs
+    while kill -0 $cmd_pid 2>/dev/null; do
+        show_spinner
         sleep 0.1
-        if [ -n "$(jobs -p)" ]; then
-            continue
-        fi
-        break
     done
 
-    # Command succeeded
-    if [ -s "$output_file" ]; then
+    # Wait for command to finish and get exit code
+    wait $cmd_pid
+    local exit_code=$?
+
+    # Clear spinner line
+    printf "\r"
+
+    # Check result
+    if [ $exit_code -eq 0 ] && [ -s "$output_file" ]; then
         log_success "$scan_name"
     else
-        log_error "$scan_name" "Command completed but produced no output"
+        # Extract error message from stderr
+        local error_msg=$(extract_error "$(cat "$temp_error_file")")
+        if [ -z "$error_msg" ]; then
+            error_msg="Command exited with code $exit_code"
+        fi
+        log_error "$scan_name" "$error_msg"
     fi
     rm -f "$temp_error_file"
 }
