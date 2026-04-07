@@ -53,7 +53,7 @@ trap cleanup SIGINT SIGTERM
 
 # Function to show spinner
 show_spinner() {
-    printf "${CYAN}${SPINNER[$SPINNER_IDX]}${NC}\r" >&1
+    printf "\r${CYAN}[${SPINNER[$SPINNER_IDX]}]${NC}" >&1
     SPINNER_IDX=$(( (SPINNER_IDX + 1) % ${#SPINNER[@]} ))
 }
 
