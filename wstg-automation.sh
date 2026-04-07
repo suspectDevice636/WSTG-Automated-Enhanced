@@ -72,13 +72,26 @@ show_progress_bar() {
 # Function to extract error details from stderr
 extract_error() {
     local error_output="$1"
-    local error_line=$(echo "$error_output" | head -1 | grep -oE "(error|failed|refused|timeout|unable|not found|permission|connection)" | head -1)
 
-    if [ -z "$error_line" ]; then
-        error_line=$(echo "$error_output" | head -1 | cut -c1-60)
+    # Look for common error patterns
+    if echo "$error_output" | grep -qi "error"; then
+        echo "$error_output" | grep -i "error" | head -1 | cut -c1-80
+    elif echo "$error_output" | grep -qi "failed\|fail"; then
+        echo "$error_output" | grep -i "fail" | head -1 | cut -c1-80
+    elif echo "$error_output" | grep -qi "refused\|connection"; then
+        echo "$error_output" | grep -i "refused\|connection" | head -1 | cut -c1-80
+    elif echo "$error_output" | grep -qi "timeout\|timed out"; then
+        echo "Timeout - target not responding"
+    elif echo "$error_output" | grep -qi "not found"; then
+        echo "$error_output" | grep -i "not found" | head -1 | cut -c1-80
+    elif echo "$error_output" | grep -qi "permission denied"; then
+        echo "Permission denied - check tool permissions"
+    elif [ -n "$error_output" ]; then
+        # If there's any stderr output, use first line
+        echo "$error_output" | head -1 | cut -c1-80
+    else
+        echo "Unknown error"
     fi
-
-    echo "$error_line"
 }
 
 # Function to log errors with detailed messages
@@ -115,7 +128,7 @@ run_scan() {
     show_progress_bar $CURRENT_SCAN $TOTAL_SCANS
     printf " "
 
-    # Run command in background
+    # Run command in background (capture both stdout and stderr)
     eval "$command" > "$output_file" 2>"$temp_error_file" &
     local cmd_pid=$!
 
@@ -132,16 +145,28 @@ run_scan() {
     # Clear spinner line
     printf "\r"
 
-    # Check result
-    if [ $exit_code -eq 0 ] && [ -s "$output_file" ]; then
+    # Determine success based on output, not just exit code
+    # Some tools (nikto, sqlmap) return non-zero even on success
+    local has_output=false
+    local has_error=false
+    local error_msg=""
+
+    [ -s "$output_file" ] && has_output=true
+    [ -s "$temp_error_file" ] && has_error=true
+
+    # If we have output, consider it a success (most tools output results on success)
+    if [ "$has_output" = true ]; then
+        log_success "$scan_name"
+    elif [ "$has_error" = true ]; then
+        # Only report error if there's stderr and no stdout
+        error_msg=$(extract_error "$(cat "$temp_error_file")")
+        log_error "$scan_name" "$error_msg"
+    elif [ $exit_code -eq 0 ]; then
+        # Tool succeeded but produced no output (might be normal)
         log_success "$scan_name"
     else
-        # Extract error message from stderr
-        local error_msg=$(extract_error "$(cat "$temp_error_file")")
-        if [ -z "$error_msg" ]; then
-            error_msg="Command exited with code $exit_code"
-        fi
-        log_error "$scan_name" "$error_msg"
+        # No output and non-zero exit code
+        log_error "$scan_name" "Tool produced no output (exit code $exit_code)"
     fi
     rm -f "$temp_error_file"
 }
@@ -310,7 +335,7 @@ fi
 echo -e "${YELLOW}[*] Phase 8: SQL Injection Checks${NC}"
 
 if check_tool sqlmap; then
-    run_scan "SQLMap scan (light)" "sqlmap -u $TARGET --batch --risk=1 --level=1 -o" "$OUTPUT_DIR/injection/01-sqlmap-light.txt"
+    run_scan "SQLMap scan (light)" "sqlmap -u $TARGET --batch --risk=1 --level=1 -o --quiet 2>&1 | head -100" "$OUTPUT_DIR/injection/01-sqlmap-light.txt"
 fi
 
 # ===== VULNERABILITY CHECKS =====
