@@ -106,8 +106,14 @@ SCANS["sitemap"]="Sitemap.xml Discovery"
 SCANS["git_exposure"]="Git Exposure Check"
 SCANS["backup_files"]="Backup Files Check"
 
+# Advanced checks
+SCANS["cors_check"]="CORS Misconfiguration Check"
+SCANS["api_discovery"]="API Endpoint Discovery"
+SCANS["sensitive_data"]="Sensitive Data Exposure Check"
+SCANS["waf_detection"]="WAF Detection"
+
 # Set scan order
-SCAN_ORDER=(dns_nslookup dns_dig whois reverse_dns nmap_service nmap_http_methods nikto whatweb dirb_iis http_headers security_headers ssl_cert tls_versions gobuster wfuzz sqlmap dir_listing robots_txt sitemap git_exposure backup_files)
+SCAN_ORDER=(dns_nslookup dns_dig whois reverse_dns nmap_service nmap_http_methods nikto whatweb dirb_iis http_headers security_headers ssl_cert tls_versions gobuster wfuzz sqlmap dir_listing robots_txt sitemap git_exposure backup_files cors_check api_discovery sensitive_data waf_detection)
 
 # Initialize all scans as enabled
 for scan in "${SCAN_ORDER[@]}"; do
@@ -181,7 +187,7 @@ log_error() {
     local error_msg="$2"
     FAILED_SCANS+=("$scan_name: $error_msg")
     ((FAILED_SCANS_COUNT++))
-    printf "\r"
+    printf "\r\033[K"  # Clear line completely
     echo -e "${RED}✗ FAILED: $scan_name${NC}"
     echo -e "  ${RED}└─ $error_msg${NC}"
 }
@@ -570,6 +576,49 @@ if [ ${SCAN_ENABLED[backup_files]} -eq 1 ] && check_tool curl; then
     for ext in .bak .backup .old .swp .tmp; do
         run_scan "Backup check (index.php$ext)" "curl -s $TARGET/index.php$ext" "$OUTPUT_DIR/web/09-backup-$ext.txt"
     done
+fi
+
+# ===== ADVANCED CHECKS =====
+if [ ${SCAN_ENABLED[cors_check]} -eq 1 ] || [ ${SCAN_ENABLED[api_discovery]} -eq 1 ] || [ ${SCAN_ENABLED[sensitive_data]} -eq 1 ] || [ ${SCAN_ENABLED[waf_detection]} -eq 1 ]; then
+    echo -e "${YELLOW}[*] Phase 11: Advanced Security Checks${NC}"
+fi
+
+if [ ${SCAN_ENABLED[cors_check]} -eq 1 ] && check_tool curl; then
+    run_scan "CORS misconfiguration check" "{
+        echo '=== CORS Configuration Check ==='; echo '';
+        echo 'Testing: Access-Control-Allow-Origin';
+        curl -sI '$TARGET' -H 'Origin: http://attacker.com' 2>&1 | grep -i 'access-control-allow' || echo 'CORS headers not found';
+        echo ''; echo 'Testing: Access-Control-Allow-Credentials';
+        curl -sI '$TARGET' 2>&1 | grep -i 'access-control-allow-credentials' || echo 'No allow-credentials header';
+    }" "$OUTPUT_DIR/headers/05-cors-check.txt"
+fi
+
+if [ ${SCAN_ENABLED[api_discovery]} -eq 1 ] && check_tool curl; then
+    run_scan "API endpoint discovery" "{
+        echo '=== API Endpoint Discovery ==='; echo '';
+        for path in /api /api/v1 /api/v2 /graphql /swagger /openapi /docs /api-docs /swagger.json /openapi.json; do
+            echo \"Checking \$path:\";
+            curl -s -I \"$TARGET\$path\" 2>&1 | grep -E '(200|301|302|401|403)' | head -1 || echo '  Not found';
+        done
+    }" "$OUTPUT_DIR/web/10-api-discovery.txt"
+fi
+
+if [ ${SCAN_ENABLED[sensitive_data]} -eq 1 ] && check_tool curl; then
+    run_scan "Sensitive data exposure check" "{
+        echo '=== Sensitive Data Exposure Check ==='; echo '';
+        echo 'Scanning for exposed secrets (API keys, tokens, credentials)...'; echo '';
+        curl -s '$TARGET' 2>&1 | grep -iE '(api[_-]?key|secret|password|token|auth|apikey|access[_-]?token|private[_-]?key|aws_access_key)' | head -20 || echo 'No obvious sensitive data found in response';
+    }" "$OUTPUT_DIR/headers/06-sensitive-data.txt"
+fi
+
+if [ ${SCAN_ENABLED[waf_detection]} -eq 1 ] && check_tool curl; then
+    run_scan "WAF/IDS detection" "{
+        echo '=== WAF Detection Test ==='; echo '';
+        echo 'Testing for WAF/IDS/IPS detection...'; echo '';
+        # Try a known malicious pattern to see if it gets blocked
+        curl -s -I \"$TARGET/?test=<script>alert(1)</script>\" 2>&1 | head -5;
+        echo ''; echo 'Note: Check if request was blocked or rate-limited';
+    }" "$OUTPUT_DIR/headers/07-waf-detection.txt"
 fi
 
 # ===== SUMMARY =====
