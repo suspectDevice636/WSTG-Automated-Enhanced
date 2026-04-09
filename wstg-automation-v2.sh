@@ -304,11 +304,34 @@ handle_menu_input() {
     while true; do
         display_menu $current_idx
 
-        # Read single key press
-        read -rsn1 key
+        # Read single key press with timeout
+        read -rsn1 -t 0.1 key || true
 
-        case $key in
-            # Enter key
+        case "$key" in
+            # Up arrow
+            $'\x1b')
+                read -rsn2 -t 0.1 arrow_seq || true
+                case "$arrow_seq" in
+                    '[A') # Up arrow
+                        if [ $current_idx -gt 0 ]; then
+                            ((current_idx--))
+                        fi
+                        ;;
+                    '[B') # Down arrow
+                        if [ $current_idx -lt $((${#SCAN_ORDER[@]} - 1)) ]; then
+                            ((current_idx++))
+                        fi
+                        ;;
+                esac
+                ;;
+            # Space bar - toggle
+            " ")
+                local scan=${SCAN_ORDER[$current_idx]}
+                SCAN_ENABLED[$scan]=$((1 - SCAN_ENABLED[$scan]))
+                # Consume any trailing newline
+                read -rsn1 -t 0.05 || true
+                ;;
+            # Enter key - start scans
             "")
                 # Count enabled scans
                 local enabled_count=0
@@ -322,28 +345,6 @@ handle_menu_input() {
                     echo -e "${RED}Please enable at least one scan!${NC}"
                     sleep 2
                 fi
-                ;;
-            # Space bar
-            " ")
-                local scan=${SCAN_ORDER[$current_idx]}
-                SCAN_ENABLED[$scan]=$((1 - SCAN_ENABLED[$scan]))
-                ;;
-            # Up arrow or 'k' (vim style)
-            $'\x1b')
-                # Handle escape sequences (arrow keys)
-                read -rsn2 key
-                case $key in
-                    '[A') # Up arrow
-                        if [ $current_idx -gt 0 ]; then
-                            ((current_idx--))
-                        fi
-                        ;;
-                    '[B') # Down arrow
-                        if [ $current_idx -lt $((${#SCAN_ORDER[@]} - 1)) ]; then
-                            ((current_idx++))
-                        fi
-                        ;;
-                esac
                 ;;
             # q to quit
             q)
