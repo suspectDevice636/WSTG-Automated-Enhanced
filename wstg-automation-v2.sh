@@ -649,7 +649,7 @@ if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] || [ ${SCAN_ENABLED[robots_txt]} -eq 1
 fi
 
 if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] && check_tool curl; then
-    run_scan "Directory listing check" "curl -s $TARGET/ 2>&1 | grep -i 'index of|directory listing'" "$OUTPUT_DIR/web/05-dir-listing-check.txt"
+    run_scan "Directory listing check" "curl -s $TARGET/ 2>&1 | tee $OUTPUT_DIR/web/05-dir-listing-check.txt | grep -i 'index of|directory listing' || echo 'No directory listing detected (good)'" "$OUTPUT_DIR/web/05-dir-listing-check.txt"
 fi
 
 if [ ${SCAN_ENABLED[robots_txt]} -eq 1 ] && check_tool curl; then

@@ -449,7 +449,7 @@ fi
 echo -e "${YELLOW}[*] Phase 8: Common Vulnerability Patterns${NC}"
 
 if check_tool curl; then
-    run_scan "Directory listing check" "curl -s $TARGET/ 2>&1 | grep -i 'index of|directory listing'" "$OUTPUT_DIR/web/03-dir-listing-check.txt"
+    run_scan "Directory listing check" "curl -s $TARGET/ 2>&1 | tee $OUTPUT_DIR/web/03-dir-listing-check.txt | grep -i 'index of|directory listing' || echo 'No directory listing detected (good)'" "$OUTPUT_DIR/web/03-dir-listing-check.txt"
     run_scan "robots.txt discovery" "curl -s $TARGET/robots.txt" "$OUTPUT_DIR/web/04-robots.txt"
     run_scan "sitemap.xml discovery" "curl -s $TARGET/sitemap.xml" "$OUTPUT_DIR/web/05-sitemap.xml"
     run_scan ".git exposure check" "curl -s $TARGET/.git/config" "$OUTPUT_DIR/web/06-git-config.txt"
