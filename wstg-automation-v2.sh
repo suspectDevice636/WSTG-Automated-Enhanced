@@ -99,9 +99,6 @@ SCANS["gobuster"]="Gobuster Directory Enumeration"
 # Fuzzing
 SCANS["wfuzz"]="WFuzz Parameter Fuzzing"
 
-# Injection testing
-SCANS["sqlmap"]="SQLMap SQL Injection Testing"
-
 # Vulnerability checks
 SCANS["dir_listing"]="Directory Listing Check"
 SCANS["robots_txt"]="Robots.txt Discovery"
@@ -115,7 +112,7 @@ SCANS["api_discovery"]="API Endpoint Discovery"
 SCANS["sensitive_data"]="Sensitive Data Exposure Check"
 
 # Set scan order
-SCAN_ORDER=(dns_nslookup dns_dig dns_host_ns dnsrecon whois reverse_dns nmap_service nmap_http_methods nikto whatweb dirb_iis http_headers security_headers ssl_cert ssl_scan tls_versions gobuster wfuzz sqlmap dir_listing robots_txt sitemap git_exposure backup_files cors_check api_discovery sensitive_data)
+SCAN_ORDER=(dns_nslookup dns_dig dns_host_ns dnsrecon whois reverse_dns nmap_service nmap_http_methods nikto whatweb dirb_iis http_headers security_headers ssl_cert ssl_scan tls_versions gobuster wfuzz dir_listing robots_txt sitemap git_exposure backup_files cors_check api_discovery sensitive_data)
 
 # Initialize all scans as enabled
 for scan in "${SCAN_ORDER[@]}"; do
@@ -411,7 +408,7 @@ mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,injection,headers,fuzzing,nmap,logs}
 # Check for required tools
 echo -e "${YELLOW}[*] Checking for required tools...${NC}\n"
 CRITICAL_TOOLS=(curl nmap)
-OPTIONAL_TOOLS=(nikto gobuster wfuzz sqlmap dig dnsrecon whois host openssl sslscan whatweb dirb)
+OPTIONAL_TOOLS=(nikto gobuster wfuzz dig dnsrecon whois host openssl sslscan whatweb dirb)
 MISSING_CRITICAL=0
 
 for tool in "${CRITICAL_TOOLS[@]}"; do
@@ -559,15 +556,12 @@ if [ ${SCAN_ENABLED[wfuzz]} -eq 1 ] && check_tool wfuzz; then
     run_scan "Parameter fuzzing (GET)" "wfuzz -c -z file,/usr/share/wordlists/wfuzz/general/common.txt -u $TARGET?FUZZ=test --hc 404" "$OUTPUT_DIR/fuzzing/01-get-params.txt"
 fi
 
-# ===== SQL INJECTION TESTING =====
-if [ ${SCAN_ENABLED[sqlmap]} -eq 1 ] && check_tool sqlmap; then
-    echo -e "${YELLOW}[*] Phase 8: SQL Injection Checks${NC}"
-    run_scan "SQLMap scan (light)" "sqlmap -u $TARGET --batch --risk=1 --level=1 -o 2>&1 | head -100" "$OUTPUT_DIR/injection/01-sqlmap-light.txt"
-fi
-
 # ===== VULNERABILITY CHECKS =====
+echo -e "${YELLOW}[*] Phase 8: Common Vulnerability Patterns${NC}"
+
+# ===== DIRECTORY & FILE CHECKS =====
 if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] || [ ${SCAN_ENABLED[robots_txt]} -eq 1 ] || [ ${SCAN_ENABLED[sitemap]} -eq 1 ] || [ ${SCAN_ENABLED[git_exposure]} -eq 1 ] || [ ${SCAN_ENABLED[backup_files]} -eq 1 ]; then
-    echo -e "${YELLOW}[*] Phase 9: Common Vulnerability Patterns${NC}"
+    true  # Phase already declared above
 fi
 
 if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] && check_tool curl; then
@@ -594,7 +588,7 @@ fi
 
 # ===== ADVANCED CHECKS =====
 if [ ${SCAN_ENABLED[cors_check]} -eq 1 ] || [ ${SCAN_ENABLED[api_discovery]} -eq 1 ] || [ ${SCAN_ENABLED[sensitive_data]} -eq 1 ]; then
-    echo -e "${YELLOW}[*] Phase 11: Advanced Security Checks${NC}"
+    echo -e "${YELLOW}[*] Phase 9: Advanced Security Checks${NC}"
 fi
 
 if [ ${SCAN_ENABLED[cors_check]} -eq 1 ] && check_tool curl; then
