@@ -283,7 +283,7 @@ display_menu() {
     echo ""
     echo -e "${CYAN}Navigation:${NC}"
     echo -e "  ${CYAN}↑ ↓${NC} - Navigate up/down"
-    echo -e "  ${CYAN}Space${NC} - Toggle scan on/off"
+    echo -e "  ${CYAN}← →${NC} - Toggle scan on/off"
     echo -e "  ${CYAN}Enter${NC} - Start scans with selected options"
     echo -e "  ${CYAN}q${NC} - Quit"
     echo ""
@@ -304,17 +304,14 @@ handle_menu_input() {
     while true; do
         display_menu $current_idx
 
-        # Read single character (one at a time)
-        IFS= read -rsn1 -t 1 key || key=""
+        # Read first character
+        IFS= read -rsn1 key
 
-        # Handle different key types
-        if [ "$key" = "" ]; then
-            # Empty means timeout, continue
-            continue
-        elif [ "$key" = $'\x1b' ]; then
-            # Escape sequence (arrow keys)
-            IFS= read -rsn2 -t 0.5 arrow_seq || arrow_seq=""
-            case "$arrow_seq" in
+        if [ "$key" = $'\x1b' ]; then
+            # Escape sequence - read next 2 characters for arrow keys
+            IFS= read -rsn2 arrow_key
+
+            case "$arrow_key" in
                 '[A') # Up arrow
                     if [ $current_idx -gt 0 ]; then
                         ((current_idx--))
@@ -325,13 +322,21 @@ handle_menu_input() {
                         ((current_idx++))
                     fi
                     ;;
+                '[C') # Right arrow - toggle ON
+                    local scan=${SCAN_ORDER[$current_idx]}
+                    SCAN_ENABLED[$scan]=1
+                    ;;
+                '[D') # Left arrow - toggle OFF
+                    local scan=${SCAN_ORDER[$current_idx]}
+                    SCAN_ENABLED[$scan]=0
+                    ;;
             esac
-        elif [ "$key" = " " ]; then
-            # Space bar - toggle
-            local scan=${SCAN_ORDER[$current_idx]}
-            SCAN_ENABLED[$scan]=$((1 - SCAN_ENABLED[$scan]))
-        elif [ "$key" = $'\r' ] || [ "$key" = $'\n' ]; then
-            # Enter key - start scans
+        elif [ "$key" = "q" ] || [ "$key" = "Q" ]; then
+            # Quit
+            echo -e "${RED}Exiting...${NC}"
+            exit 0
+        elif [ "$key" = "" ]; then
+            # Empty string means Enter was pressed (newline)
             local enabled_count=0
             for scan in "${SCAN_ORDER[@]}"; do
                 [ ${SCAN_ENABLED[$scan]} -eq 1 ] && ((enabled_count++))
@@ -343,10 +348,6 @@ handle_menu_input() {
                 echo -e "${RED}Please enable at least one scan!${NC}"
                 sleep 2
             fi
-        elif [ "$key" = "q" ] || [ "$key" = "Q" ]; then
-            # Quit
-            echo -e "${RED}Exiting...${NC}"
-            exit 0
         fi
     done
 }
