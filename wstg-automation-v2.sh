@@ -121,10 +121,27 @@ done
 
 # Check arguments
 if [ -z "$1" ]; then
-    echo -e "${RED}Usage: $0 <target_url>${NC}"
-    echo -e "${YELLOW}Example: $0 http://example.com${NC}"
+    echo -e "${RED}Usage: $0 <target_url> -o <output_directory>${NC}"
+    echo -e "${YELLOW}Example: $0 http://example.com -o ./scans${NC}"
     exit 1
 fi
+
+TARGET="$1"
+OUTPUT_DIR="scans"  # Default output directory
+
+# Parse optional arguments
+while [[ $# -gt 1 ]]; do
+    case "$2" in
+        -o)
+            OUTPUT_DIR="$3"
+            shift 2
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $2${NC}"
+            exit 1
+            ;;
+    esac
+done
 
 # Cleanup function to kill all child processes on exit
 cleanup() {
@@ -358,10 +375,6 @@ handle_menu_input() {
 }
 
 # Main script starts here
-TARGET="$1"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUTPUT_DIR="./wstg-scan-${TIMESTAMP}"
-
 # Extract host and port from URL
 HOST=$(echo "$TARGET" | sed -E 's|https?://||' | cut -d'/' -f1 | cut -d':' -f1)
 PORT=$(echo "$TARGET" | grep -oP '(?<=:)\d+' || echo "80")
@@ -403,7 +416,7 @@ echo -e "Output: ${GREEN}$OUTPUT_DIR${NC}"
 echo -e "${BLUE}============================================${NC}\n"
 
 # Create output directory structure
-mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,injection,headers,fuzzing,nmap,logs}
+mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,headers,fuzzing,nmap,logs}
 
 # Check for required tools
 echo -e "${YELLOW}[*] Checking for required tools...${NC}\n"
@@ -646,7 +659,6 @@ echo -e "  ${BLUE}nmap/${NC}        - Nmap service detection and HTTP methods (a
 echo -e "  ${BLUE}web/${NC}         - Web server (Nikto, WhatWeb, Dirb), directories, backups"
 echo -e "  ${BLUE}ssl/${NC}         - Certificate and TLS configuration"
 echo -e "  ${BLUE}headers/${NC}     - HTTP headers and security checks"
-echo -e "  ${BLUE}injection/${NC}   - SQL injection and injection testing"
 echo -e "  ${BLUE}fuzzing/${NC}     - Fuzzing and parameter discovery"
 echo -e "  ${BLUE}logs/${NC}        - Detailed logs\n"
 

@@ -59,10 +59,27 @@ CURRENT_SCAN=0
 
 # Check arguments
 if [ -z "$1" ]; then
-    echo -e "${RED}Usage: $0 <target_url>${NC}"
-    echo -e "${YELLOW}Example: $0 http://example.com${NC}"
+    echo -e "${RED}Usage: $0 <target_url> -o <output_directory>${NC}"
+    echo -e "${YELLOW}Example: $0 http://example.com -o ./scans${NC}"
     exit 1
 fi
+
+TARGET="$1"
+OUTPUT_DIR="scans"  # Default output directory
+
+# Parse optional arguments
+while [[ $# -gt 1 ]]; do
+    case "$2" in
+        -o)
+            OUTPUT_DIR="$3"
+            shift 2
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $2${NC}"
+            exit 1
+            ;;
+    esac
+done
 
 # Cleanup function to kill all child processes on exit
 cleanup() {
@@ -208,10 +225,6 @@ check_tool() {
     return 0
 }
 
-TARGET="$1"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUTPUT_DIR="./wstg-scan-${TIMESTAMP}"
-
 # Extract host and port from URL
 HOST=$(echo "$TARGET" | sed -E 's|https?://||' | cut -d'/' -f1 | cut -d':' -f1)
 PORT=$(echo "$TARGET" | grep -oP '(?<=:)\d+' || echo "80")
@@ -231,7 +244,7 @@ echo -e "Output: ${GREEN}$OUTPUT_DIR${NC}"
 echo -e "${BLUE}============================================${NC}\n"
 
 # Create output directory structure
-mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,injection,headers,fuzzing,nmap,logs}
+mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,headers,fuzzing,nmap,logs}
 
 # Check for required tools
 echo -e "${YELLOW}[*] Checking for required tools...${NC}\n"
@@ -367,15 +380,8 @@ if check_tool wfuzz; then
     run_scan "Parameter fuzzing (GET)" "wfuzz -c -z file,/usr/share/wordlists/wfuzz/general/common.txt -u $TARGET?FUZZ=test --hc 404" "$OUTPUT_DIR/fuzzing/01-get-params.txt"
 fi
 
-# ===== SQL INJECTION TESTING =====
-echo -e "${YELLOW}[*] Phase 8: SQL Injection Checks${NC}"
-
-if check_tool sqlmap; then
-    run_scan "SQLMap scan (light)" "sqlmap -u $TARGET --batch --risk=1 --level=1 -o --quiet 2>&1 | head -100" "$OUTPUT_DIR/injection/01-sqlmap-light.txt"
-fi
-
 # ===== VULNERABILITY CHECKS =====
-echo -e "${YELLOW}[*] Phase 9: Common Vulnerability Patterns${NC}"
+echo -e "${YELLOW}[*] Phase 8: Common Vulnerability Patterns${NC}"
 
 if check_tool curl; then
     run_scan "Directory listing check" "curl -s $TARGET/ 2>&1 | grep -i 'index of|directory listing'" "$OUTPUT_DIR/web/03-dir-listing-check.txt"
@@ -390,7 +396,7 @@ if check_tool curl; then
 fi
 
 # ===== CUSTOM CHECKS =====
-echo -e "${YELLOW}[*] Phase 10: Additional Security Checks${NC}"
+echo -e "${YELLOW}[*] Phase 9: Additional Security Checks${NC}"
 
 if check_tool curl; then
     # Security headers check
@@ -434,7 +440,6 @@ echo -e "  ${BLUE}nmap/${NC}        - Nmap service detection and HTTP methods (a
 echo -e "  ${BLUE}web/${NC}         - Web server (Nikto, WhatWeb, Dirb), directories, backups"
 echo -e "  ${BLUE}ssl/${NC}         - Certificate and TLS configuration"
 echo -e "  ${BLUE}headers/${NC}     - HTTP headers and security checks"
-echo -e "  ${BLUE}injection/${NC}   - SQL injection and injection testing"
 echo -e "  ${BLUE}fuzzing/${NC}     - Fuzzing and parameter discovery"
 echo -e "  ${BLUE}logs/${NC}        - Detailed logs\n"
 
@@ -468,9 +473,8 @@ PHASES EXECUTED:
 ✓ Phase 5: SSL/TLS Configuration (Certificates, protocols)
 ✓ Phase 6: Directory Enumeration (Gobuster)
 ✓ Phase 7: Parameter Fuzzing (wfuzz)
-✓ Phase 8: SQL Injection (SQLMap light)
-✓ Phase 9: Common Vulnerability Patterns (robots.txt, .git, backups)
-✓ Phase 10: Additional Security Checks (security headers)
+✓ Phase 8: Common Vulnerability Patterns (robots.txt, .git, backups)
+✓ Phase 9: Additional Security Checks (security headers)
 
 EOF
 
