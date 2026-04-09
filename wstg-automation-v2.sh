@@ -251,15 +251,16 @@ check_tool() {
 
 # Function to display interactive menu
 display_menu() {
+    local current_idx=$1
     clear
     echo -e "${BLUE}════════════════════════════════════════${NC}"
     echo -e "${BLUE}WSTG Automated Scanner v${VERSION}${NC}"
     echo -e "${BLUE}════════════════════════════════════════${NC}"
     echo ""
-    echo -e "${MAGENTA}SELECT SCANS TO RUN (Space to toggle, Enter to start):${NC}"
+    echo -e "${MAGENTA}SELECT SCANS TO RUN${NC}"
     echo ""
 
-    local idx=1
+    local idx=0
     for scan in "${SCAN_ORDER[@]}"; do
         local enabled=${SCAN_ENABLED[$scan]}
         local checkbox="[ ]"
@@ -270,38 +271,51 @@ display_menu() {
             color="$GREEN"
         fi
 
-        printf "${color}%-2d) %s %-40s${NC}\n" $idx "$checkbox" "${SCANS[$scan]}"
+        # Highlight current selection
+        if [ $idx -eq $current_idx ]; then
+            printf "${CYAN}→ ${color}%s %-40s${NC}\n" "$checkbox" "${SCANS[$scan]}"
+        else
+            printf "  ${color}%s %-40s${NC}\n" "$checkbox" "${SCANS[$scan]}"
+        fi
         ((idx++))
     done
 
     echo ""
     echo -e "${CYAN}Navigation:${NC}"
+    echo -e "  ${CYAN}↑ ↓${NC} - Navigate up/down"
+    echo -e "  ${CYAN}Space${NC} - Toggle scan on/off"
     echo -e "  ${CYAN}Enter${NC} - Start scans with selected options"
-    echo -e "  ${CYAN}1-${#SCAN_ORDER[@]}${NC} - Toggle scan on/off"
-    echo -e "  ${CYAN}a${NC} - Enable all scans"
-    echo -e "  ${CYAN}n${NC} - Disable all scans"
     echo -e "  ${CYAN}q${NC} - Quit"
     echo ""
+
+    # Count enabled scans
+    local enabled_count=0
+    for scan in "${SCAN_ORDER[@]}"; do
+        [ ${SCAN_ENABLED[$scan]} -eq 1 ] && ((enabled_count++))
+    done
+
+    echo -e "${YELLOW}Scans enabled: $enabled_count / ${#SCAN_ORDER[@]}${NC}"
 }
 
-# Function to handle menu input
+# Function to handle menu input with arrow keys
 handle_menu_input() {
+    local current_idx=0
+
     while true; do
-        display_menu
+        display_menu $current_idx
 
-        # Count enabled scans
-        local enabled_count=0
-        for scan in "${SCAN_ORDER[@]}"; do
-            [ ${SCAN_ENABLED[$scan]} -eq 1 ] && ((enabled_count++))
-        done
+        # Read single key press
+        read -rsn1 key
 
-        echo -e "${YELLOW}Scans enabled: $enabled_count / ${#SCAN_ORDER[@]}${NC}"
-        echo ""
-        echo -n "Enter choice: "
-        read -r choice
-
-        case $choice in
+        case $key in
+            # Enter key
             "")
+                # Count enabled scans
+                local enabled_count=0
+                for scan in "${SCAN_ORDER[@]}"; do
+                    [ ${SCAN_ENABLED[$scan]} -eq 1 ] && ((enabled_count++))
+                done
+
                 if [ $enabled_count -gt 0 ]; then
                     return 0
                 else
@@ -309,23 +323,29 @@ handle_menu_input() {
                     sleep 2
                 fi
                 ;;
-            [0-9]|[0-9][0-9])
-                if [ "$choice" -ge 1 ] && [ "$choice" -le ${#SCAN_ORDER[@]} ]; then
-                    local scan_idx=$((choice - 1))
-                    local scan=${SCAN_ORDER[$scan_idx]}
-                    SCAN_ENABLED[$scan]=$((1 - SCAN_ENABLED[$scan]))
-                fi
+            # Space bar
+            " ")
+                local scan=${SCAN_ORDER[$current_idx]}
+                SCAN_ENABLED[$scan]=$((1 - SCAN_ENABLED[$scan]))
                 ;;
-            a)
-                for scan in "${SCAN_ORDER[@]}"; do
-                    SCAN_ENABLED[$scan]=1
-                done
+            # Up arrow or 'k' (vim style)
+            $'\x1b')
+                # Handle escape sequences (arrow keys)
+                read -rsn2 key
+                case $key in
+                    '[A') # Up arrow
+                        if [ $current_idx -gt 0 ]; then
+                            ((current_idx--))
+                        fi
+                        ;;
+                    '[B') # Down arrow
+                        if [ $current_idx -lt $((${#SCAN_ORDER[@]} - 1)) ]; then
+                            ((current_idx++))
+                        fi
+                        ;;
+                esac
                 ;;
-            n)
-                for scan in "${SCAN_ORDER[@]}"; do
-                    SCAN_ENABLED[$scan]=0
-                done
-                ;;
+            # q to quit
             q)
                 echo -e "${RED}Exiting...${NC}"
                 exit 0
