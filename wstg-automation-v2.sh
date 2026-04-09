@@ -301,16 +301,20 @@ display_menu() {
 handle_menu_input() {
     local current_idx=0
 
+    # Disable terminal echo and line buffering
+    stty -echo
+    trap "stty echo" EXIT
+
     while true; do
         display_menu $current_idx
 
-        # Read single key press with timeout
-        read -rsn1 -t 0.1 key || true
+        # Read single character
+        IFS= read -rsn1 key
 
         case "$key" in
-            # Up arrow
+            # Escape sequence (arrow keys)
             $'\x1b')
-                read -rsn2 -t 0.1 arrow_seq || true
+                read -rsn2 arrow_seq
                 case "$arrow_seq" in
                     '[A') # Up arrow
                         if [ $current_idx -gt 0 ]; then
@@ -324,15 +328,13 @@ handle_menu_input() {
                         ;;
                 esac
                 ;;
-            # Space bar - toggle
+            # Space bar - toggle (ASCII 32)
             " ")
                 local scan=${SCAN_ORDER[$current_idx]}
                 SCAN_ENABLED[$scan]=$((1 - SCAN_ENABLED[$scan]))
-                # Consume any trailing newline
-                read -rsn1 -t 0.05 || true
                 ;;
-            # Enter key - start scans
-            "")
+            # Enter key - start scans (newline, ASCII 10)
+            $'\n')
                 # Count enabled scans
                 local enabled_count=0
                 for scan in "${SCAN_ORDER[@]}"; do
@@ -340,6 +342,7 @@ handle_menu_input() {
                 done
 
                 if [ $enabled_count -gt 0 ]; then
+                    stty echo
                     return 0
                 else
                     echo -e "${RED}Please enable at least one scan!${NC}"
@@ -347,8 +350,9 @@ handle_menu_input() {
                 fi
                 ;;
             # q to quit
-            q)
+            q|Q)
                 echo -e "${RED}Exiting...${NC}"
+                stty echo
                 exit 0
                 ;;
         esac
