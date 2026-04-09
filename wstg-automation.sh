@@ -60,47 +60,47 @@ CURRENT_SCAN=0
 # Function to display help and disclaimer
 show_help() {
     cat << EOF
-${CYAN}========================================${NC}
-${GREEN}WSTG Automated Security Scanner v1.0.0${NC}
-${CYAN}========================================${NC}
+========================================
+WSTG Automated Security Scanner v1.0.0
+========================================
 
-${RED}⚠️  IMPORTANT LEGAL NOTICE ⚠️${NC}
+IMPORTANT LEGAL NOTICE
 
-${YELLOW}THIS SCRIPT IS FOR AUTHORIZED SECURITY TESTING ONLY${NC}
+THIS SCRIPT IS FOR AUTHORIZED SECURITY TESTING ONLY
 
-${RED}❌ DO NOT use this script to scan any systems without explicit,
-   written authorization from the system owner.${NC}
+DO NOT use this script to scan any systems without explicit,
+written authorization from the system owner.
 
-${RED}⚠️  UNAUTHORIZED ACCESS is ILLEGAL and may result in:${NC}
+UNAUTHORIZED ACCESS IS ILLEGAL and may result in:
    - Criminal prosecution
    - Civil liability
    - Imprisonment
    - Substantial fines
 
-${YELLOW}📖 EDUCATIONAL USE ONLY${NC}
+EDUCATIONAL USE ONLY
    This tool is designed for learning and authorized penetration testing
    in controlled environments with proper authorization.
 
-${GREEN}✅ BEFORE RUNNING:${NC}
+BEFORE RUNNING:
    1. Verify you have written permission to test the target
    2. Ensure the target is within your authorized scope
    3. Review your local laws regarding security testing
    4. Follow responsible disclosure practices
 
-${CYAN}USAGE:${NC}
+USAGE:
    $0 <target_url> [-o output_directory]
 
-${CYAN}OPTIONS:${NC}
+OPTIONS:
    <target_url>           Target URL (e.g., http://example.com)
    -o <output_directory>  Output directory for scan results (default: ./scans)
    -h, --help             Display this help message
 
-${CYAN}EXAMPLES:${NC}
+EXAMPLES:
    $0 http://example.com
    $0 http://example.com -o ./my-scans
    $0 -h
 
-${CYAN}OUTPUT STRUCTURE:${NC}
+OUTPUT STRUCTURE:
    recon/       - DNS, WHOIS results
    nmap/        - Nmap service detection and HTTP methods
    web/         - Web server analysis, directories, backups
@@ -109,7 +109,7 @@ ${CYAN}OUTPUT STRUCTURE:${NC}
    fuzzing/     - Fuzzing and parameter discovery
    logs/        - Detailed logs
 
-${CYAN}========================================${NC}
+========================================
 EOF
     exit 0
 }
