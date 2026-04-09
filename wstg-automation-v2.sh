@@ -70,6 +70,8 @@ declare -a SCAN_ORDER
 # Reconnaissance scans
 SCANS["dns_nslookup"]="DNS Lookup (nslookup)"
 SCANS["dns_dig"]="DNS Lookup (dig)"
+SCANS["dns_host_ns"]="DNS Nameservers (host -t ns)"
+SCANS["dnsrecon"]="DNS Reconnaissance (dnsrecon)"
 SCANS["whois"]="WHOIS Lookup"
 SCANS["reverse_dns"]="Reverse DNS Lookup"
 
@@ -88,6 +90,7 @@ SCANS["security_headers"]="Security Headers Check"
 
 # SSL/TLS
 SCANS["ssl_cert"]="SSL Certificate Analysis"
+SCANS["ssl_scan"]="SSL Configuration Scan (sslscan)"
 SCANS["tls_versions"]="TLS Version Support"
 
 # Directory enumeration
@@ -112,7 +115,7 @@ SCANS["api_discovery"]="API Endpoint Discovery"
 SCANS["sensitive_data"]="Sensitive Data Exposure Check"
 
 # Set scan order
-SCAN_ORDER=(dns_nslookup dns_dig whois reverse_dns nmap_service nmap_http_methods nikto whatweb dirb_iis http_headers security_headers ssl_cert tls_versions gobuster wfuzz sqlmap dir_listing robots_txt sitemap git_exposure backup_files cors_check api_discovery sensitive_data)
+SCAN_ORDER=(dns_nslookup dns_dig dns_host_ns dnsrecon whois reverse_dns nmap_service nmap_http_methods nikto whatweb dirb_iis http_headers security_headers ssl_cert ssl_scan tls_versions gobuster wfuzz sqlmap dir_listing robots_txt sitemap git_exposure backup_files cors_check api_discovery sensitive_data)
 
 # Initialize all scans as enabled
 for scan in "${SCAN_ORDER[@]}"; do
@@ -408,7 +411,7 @@ mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,injection,headers,fuzzing,nmap,logs}
 # Check for required tools
 echo -e "${YELLOW}[*] Checking for required tools...${NC}\n"
 CRITICAL_TOOLS=(curl nmap)
-OPTIONAL_TOOLS=(nikto gobuster wfuzz sqlmap dig whois host openssl whatweb dirb)
+OPTIONAL_TOOLS=(nikto gobuster wfuzz sqlmap dig dnsrecon whois host openssl sslscan whatweb dirb)
 MISSING_CRITICAL=0
 
 for tool in "${CRITICAL_TOOLS[@]}"; do
@@ -454,8 +457,16 @@ if [ ${SCAN_ENABLED[dns_dig]} -eq 1 ] && check_tool dig; then
     run_scan "DNS Lookup (dig)" "dig $HOST +short" "$OUTPUT_DIR/recon/02-dig-short.txt"
 fi
 
+if [ ${SCAN_ENABLED[dns_host_ns]} -eq 1 ] && check_tool host; then
+    run_scan "DNS Nameservers (host -t ns)" "host -t ns $HOST" "$OUTPUT_DIR/recon/03-dns-nameservers.txt"
+fi
+
+if [ ${SCAN_ENABLED[dnsrecon]} -eq 1 ] && check_tool dnsrecon; then
+    run_scan "DNS Reconnaissance (dnsrecon)" "dnsrecon -d $HOST 2>&1" "$OUTPUT_DIR/recon/04-dnsrecon.txt"
+fi
+
 if [ ${SCAN_ENABLED[whois]} -eq 1 ] && check_tool whois; then
-    run_scan "WHOIS Lookup" "whois $HOST" "$OUTPUT_DIR/recon/03-whois.txt"
+    run_scan "WHOIS Lookup" "whois $HOST" "$OUTPUT_DIR/recon/05-whois.txt"
 fi
 
 if [ ${SCAN_ENABLED[reverse_dns]} -eq 1 ] && check_tool host; then
@@ -526,6 +537,10 @@ if [ ${SCAN_ENABLED[ssl_cert]} -eq 1 ] && check_tool openssl && ([ "$SCHEME" == 
     run_scan "SSL certificate info" "openssl s_client -connect $HOST:$PORT -servername $HOST < /dev/null 2>&1 | openssl x509 -text -noout" "$OUTPUT_DIR/ssl/01-cert-info.txt"
 fi
 
+if [ ${SCAN_ENABLED[ssl_scan]} -eq 1 ] && check_tool sslscan && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
+    run_scan "SSL configuration scan (sslscan)" "sslscan $HOST:$PORT 2>&1" "$OUTPUT_DIR/ssl/02-sslscan.txt"
+fi
+
 if [ ${SCAN_ENABLED[tls_versions]} -eq 1 ] && check_tool curl && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
     run_scan "TLS v1.0 support" "curl -I --tlsv1.0 $TARGET" "$OUTPUT_DIR/ssl/03-tls-v1.0.txt"
     run_scan "TLS v1.1 support" "curl -I --tlsv1.1 $TARGET" "$OUTPUT_DIR/ssl/04-tls-v1.1.txt"
@@ -535,7 +550,7 @@ fi
 # ===== DIRECTORY ENUMERATION =====
 if [ ${SCAN_ENABLED[gobuster]} -eq 1 ] && check_tool gobuster; then
     echo -e "${YELLOW}[*] Phase 6: Directory Enumeration${NC}"
-    run_scan "Gobuster directory scan" "gobuster dir -u $TARGET -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -q" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
+    run_scan "Gobuster directory scan" "gobuster -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u $TARGET -k -s \"204,301,302,307,401,403\" -b \"\"" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
 fi
 
 # ===== PARAMETER FUZZING =====
@@ -547,7 +562,7 @@ fi
 # ===== SQL INJECTION TESTING =====
 if [ ${SCAN_ENABLED[sqlmap]} -eq 1 ] && check_tool sqlmap; then
     echo -e "${YELLOW}[*] Phase 8: SQL Injection Checks${NC}"
-    run_scan "SQLMap scan (light)" "sqlmap -u $TARGET --batch --risk=1 --level=1 -o --quiet 2>&1 | head -100" "$OUTPUT_DIR/injection/01-sqlmap-light.txt"
+    run_scan "SQLMap scan (light)" "sqlmap -u $TARGET --batch --risk=1 --level=1 -o 2>&1 | head -100" "$OUTPUT_DIR/injection/01-sqlmap-light.txt"
 fi
 
 # ===== VULNERABILITY CHECKS =====
