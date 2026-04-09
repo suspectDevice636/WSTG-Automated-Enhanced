@@ -57,10 +57,75 @@ FAILED_SCANS_COUNT=0
 TOTAL_SCANS=0
 CURRENT_SCAN=0
 
+# Function to display help and disclaimer
+show_help() {
+    cat << EOF
+${CYAN}========================================${NC}
+${GREEN}WSTG Automated Security Scanner v1.0.0${NC}
+${CYAN}========================================${NC}
+
+${RED}⚠️  IMPORTANT LEGAL NOTICE ⚠️${NC}
+
+${YELLOW}THIS SCRIPT IS FOR AUTHORIZED SECURITY TESTING ONLY${NC}
+
+${RED}❌ DO NOT use this script to scan any systems without explicit,
+   written authorization from the system owner.${NC}
+
+${RED}⚠️  UNAUTHORIZED ACCESS is ILLEGAL and may result in:${NC}
+   - Criminal prosecution
+   - Civil liability
+   - Imprisonment
+   - Substantial fines
+
+${YELLOW}📖 EDUCATIONAL USE ONLY${NC}
+   This tool is designed for learning and authorized penetration testing
+   in controlled environments with proper authorization.
+
+${GREEN}✅ BEFORE RUNNING:${NC}
+   1. Verify you have written permission to test the target
+   2. Ensure the target is within your authorized scope
+   3. Review your local laws regarding security testing
+   4. Follow responsible disclosure practices
+
+${CYAN}USAGE:${NC}
+   $0 <target_url> [-o output_directory]
+
+${CYAN}OPTIONS:${NC}
+   <target_url>           Target URL (e.g., http://example.com)
+   -o <output_directory>  Output directory for scan results (default: ./scans)
+   -h, --help             Display this help message
+
+${CYAN}EXAMPLES:${NC}
+   $0 http://example.com
+   $0 http://example.com -o ./my-scans
+   $0 -h
+
+${CYAN}OUTPUT STRUCTURE:${NC}
+   recon/       - DNS, WHOIS results
+   nmap/        - Nmap service detection and HTTP methods
+   web/         - Web server analysis, directories, backups
+   ssl/         - Certificate and TLS configuration
+   headers/     - HTTP headers and security checks
+   fuzzing/     - Fuzzing and parameter discovery
+   logs/        - Detailed logs
+
+${CYAN}========================================${NC}
+EOF
+    exit 0
+}
+
+# Check for help flag first
+for arg in "$@"; do
+    if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+        show_help
+    fi
+done
+
 # Check arguments
 if [ -z "$1" ]; then
     echo -e "${RED}Usage: $0 <target_url> -o <output_directory>${NC}"
     echo -e "${YELLOW}Example: $0 http://example.com -o ./scans${NC}"
+    echo -e "${CYAN}Run '$0 -h' for full help and disclaimer${NC}"
     exit 1
 fi
 
