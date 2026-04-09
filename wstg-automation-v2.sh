@@ -301,61 +301,53 @@ display_menu() {
 handle_menu_input() {
     local current_idx=0
 
-    # Disable terminal echo and line buffering
-    stty -echo
-    trap "stty echo" EXIT
-
     while true; do
         display_menu $current_idx
 
-        # Read single character
-        IFS= read -rsn1 key
+        # Read single character (one at a time)
+        IFS= read -rsn1 -t 1 key || key=""
 
-        case "$key" in
+        # Handle different key types
+        if [ "$key" = "" ]; then
+            # Empty means timeout, continue
+            continue
+        elif [ "$key" = $'\x1b' ]; then
             # Escape sequence (arrow keys)
-            $'\x1b')
-                read -rsn2 arrow_seq
-                case "$arrow_seq" in
-                    '[A') # Up arrow
-                        if [ $current_idx -gt 0 ]; then
-                            ((current_idx--))
-                        fi
-                        ;;
-                    '[B') # Down arrow
-                        if [ $current_idx -lt $((${#SCAN_ORDER[@]} - 1)) ]; then
-                            ((current_idx++))
-                        fi
-                        ;;
-                esac
-                ;;
-            # Space bar - toggle (ASCII 32)
-            " ")
-                local scan=${SCAN_ORDER[$current_idx]}
-                SCAN_ENABLED[$scan]=$((1 - SCAN_ENABLED[$scan]))
-                ;;
-            # Enter key - start scans (newline, ASCII 10)
-            $'\n')
-                # Count enabled scans
-                local enabled_count=0
-                for scan in "${SCAN_ORDER[@]}"; do
-                    [ ${SCAN_ENABLED[$scan]} -eq 1 ] && ((enabled_count++))
-                done
+            IFS= read -rsn2 -t 0.5 arrow_seq || arrow_seq=""
+            case "$arrow_seq" in
+                '[A') # Up arrow
+                    if [ $current_idx -gt 0 ]; then
+                        ((current_idx--))
+                    fi
+                    ;;
+                '[B') # Down arrow
+                    if [ $current_idx -lt $((${#SCAN_ORDER[@]} - 1)) ]; then
+                        ((current_idx++))
+                    fi
+                    ;;
+            esac
+        elif [ "$key" = " " ]; then
+            # Space bar - toggle
+            local scan=${SCAN_ORDER[$current_idx]}
+            SCAN_ENABLED[$scan]=$((1 - SCAN_ENABLED[$scan]))
+        elif [ "$key" = $'\r' ] || [ "$key" = $'\n' ]; then
+            # Enter key - start scans
+            local enabled_count=0
+            for scan in "${SCAN_ORDER[@]}"; do
+                [ ${SCAN_ENABLED[$scan]} -eq 1 ] && ((enabled_count++))
+            done
 
-                if [ $enabled_count -gt 0 ]; then
-                    stty echo
-                    return 0
-                else
-                    echo -e "${RED}Please enable at least one scan!${NC}"
-                    sleep 2
-                fi
-                ;;
-            # q to quit
-            q|Q)
-                echo -e "${RED}Exiting...${NC}"
-                stty echo
-                exit 0
-                ;;
-        esac
+            if [ $enabled_count -gt 0 ]; then
+                return 0
+            else
+                echo -e "${RED}Please enable at least one scan!${NC}"
+                sleep 2
+            fi
+        elif [ "$key" = "q" ] || [ "$key" = "Q" ]; then
+            # Quit
+            echo -e "${RED}Exiting...${NC}"
+            exit 0
+        fi
     done
 }
 
