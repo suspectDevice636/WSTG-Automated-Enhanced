@@ -81,7 +81,6 @@ SCANS["nmap_http_methods"]="Nmap HTTP Methods (NSE)"
 SCANS["nmap_tcp_all"]="Nmap All Ports TCP Scan"
 SCANS["nmap_udp_all"]="Nmap All Ports UDP Scan"
 SCANS["nmap_safe_scripts"]="Nmap Safe Scripts Scan"
-SCANS["massscan"]="Massscan Full Port Scan"
 
 # Web server analysis
 SCANS["nikto"]="Nikto Web Server Scan"
@@ -117,7 +116,7 @@ SCANS["api_discovery"]="API Endpoint Discovery"
 SCANS["sensitive_data"]="Sensitive Data Exposure Check"
 
 # Set scan order
-SCAN_ORDER=(dns_nslookup dns_dig dns_host_ns dnsrecon whois reverse_dns nmap_service nmap_http_methods nmap_tcp_all nmap_udp_all nmap_safe_scripts massscan nikto whatweb dirb_iis dirb_apache http_headers security_headers ssl_cert ssl_scan tls_versions gobuster wfuzz dir_listing robots_txt sitemap git_exposure backup_files cors_check api_discovery sensitive_data)
+SCAN_ORDER=(dns_nslookup dns_dig dns_host_ns dnsrecon whois reverse_dns nmap_service nmap_http_methods nmap_tcp_all nmap_udp_all nmap_safe_scripts nikto whatweb dirb_iis dirb_apache http_headers security_headers ssl_cert ssl_scan tls_versions gobuster wfuzz dir_listing robots_txt sitemap git_exposure backup_files cors_check api_discovery sensitive_data)
 
 # Initialize all scans as enabled
 for scan in "${SCAN_ORDER[@]}"; do
@@ -497,7 +496,7 @@ mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,headers,fuzzing,nmap,logs}
 # Check for required tools
 echo -e "${YELLOW}[*] Checking for required tools...${NC}\n"
 CRITICAL_TOOLS=(curl nmap)
-OPTIONAL_TOOLS=(nikto gobuster wfuzz dig dnsrecon whois host openssl sslscan whatweb dirb nmap masscan)
+OPTIONAL_TOOLS=(nikto gobuster wfuzz dig dnsrecon whois host openssl sslscan whatweb dirb nmap)
 MISSING_CRITICAL=0
 
 for tool in "${CRITICAL_TOOLS[@]}"; do
@@ -584,10 +583,6 @@ if [ ${SCAN_ENABLED[nmap_safe_scripts]} -eq 1 ] && check_tool nmap; then
     run_scan "Nmap Safe Scripts" "nmap -sV -Pn --script=safe -oA $OUTPUT_DIR/nmap/05-nmap-safe-scripts $HOST 2>&1 | tee $OUTPUT_DIR/nmap/05-nmap-safe-scripts.txt" "$OUTPUT_DIR/nmap/05-nmap-safe-scripts.txt"
 fi
 
-if [ ${SCAN_ENABLED[massscan]} -eq 1 ] && check_tool masscan; then
-    run_scan "Massscan Full Port Scan" "masscan $HOST -p0-65535 --rate=1000 2>&1" "$OUTPUT_DIR/nmap/06-massscan.txt"
-fi
-
 # ===== WEB SERVER SCANNING =====
 if [ ${SCAN_ENABLED[nikto]} -eq 1 ] || [ ${SCAN_ENABLED[whatweb]} -eq 1 ] || [ ${SCAN_ENABLED[dirb_iis]} -eq 1 ] || [ ${SCAN_ENABLED[dirb_apache]} -eq 1 ]; then
     echo -e "${YELLOW}[*] Phase 3: Web Server Analysis${NC}"
@@ -598,16 +593,16 @@ if [ ${SCAN_ENABLED[nikto]} -eq 1 ] && check_tool nikto; then
 fi
 
 if [ ${SCAN_ENABLED[whatweb]} -eq 1 ] && check_tool whatweb; then
-    run_scan "WhatWeb scan" "whatweb -v $TARGET" "$OUTPUT_DIR/web/02-whatweb-scan.txt"
+    run_scan "WhatWeb scan" "whatweb -v --no-ssl-verify $TARGET 2>&1" "$OUTPUT_DIR/web/02-whatweb-scan.txt"
 fi
 
 if [ ${SCAN_ENABLED[dirb_iis]} -eq 1 ] && check_tool dirb; then
-    run_scan "Dirb IIS scan" "dirb $TARGET /usr/share/wordlists/wfuzz/vulns/iis.txt -o $OUTPUT_DIR/web/03-dirb-iis.txt" "$OUTPUT_DIR/web/03-dirb-iis.txt"
+    run_scan "Dirb IIS scan" "dirb $TARGET /usr/share/wordlists/wfuzz/vulns/iis.txt -r -q 2>/dev/null" "$OUTPUT_DIR/web/03-dirb-iis.txt"
 fi
 
 if [ ${SCAN_ENABLED[dirb_apache]} -eq 1 ] && check_tool dirb; then
     # Look for Apache-specific files and configurations (.htaccess, .htpasswd, etc.)
-    run_scan "Dirb Apache files scan" "dirb $TARGET /usr/share/wordlists/dirb/common.txt -o $OUTPUT_DIR/web/03-dirb-apache.txt" "$OUTPUT_DIR/web/03-dirb-apache.txt"
+    run_scan "Dirb Apache files scan" "dirb $TARGET /usr/share/wordlists/dirb/common.txt -r -q 2>/dev/null" "$OUTPUT_DIR/web/03-dirb-apache.txt"
 fi
 
 # ===== HEADER ANALYSIS =====
@@ -644,8 +639,12 @@ if [ ${SCAN_ENABLED[ssl_cert]} -eq 1 ] && check_tool openssl && ([ "$SCHEME" == 
     run_scan "SSL certificate info" "openssl s_client -connect $HOST:$PORT -servername $HOST < /dev/null 2>&1 | openssl x509 -text -noout" "$OUTPUT_DIR/ssl/01-cert-info.txt"
 fi
 
-if [ ${SCAN_ENABLED[ssl_scan]} -eq 1 ] && check_tool sslscan && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
-    run_scan "SSL configuration scan (sslscan)" "timeout 60 sslscan --no-failed $HOST:$PORT 2>&1 | head -200" "$OUTPUT_DIR/ssl/02-sslscan.txt"
+if [ ${SCAN_ENABLED[ssl_scan]} -eq 1 ] && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
+    if check_tool sslscan; then
+        run_scan "SSL configuration scan (sslscan)" "timeout 60 sslscan --no-failed --no-preferred $HOST:$PORT 2>&1" "$OUTPUT_DIR/ssl/02-sslscan.txt"
+    elif check_tool openssl; then
+        run_scan "SSL configuration scan (openssl)" "echo 'QUIT' | timeout 30 openssl s_client -connect $HOST:$PORT -servername $HOST 2>&1 | head -100" "$OUTPUT_DIR/ssl/02-ssl-config.txt"
+    fi
 fi
 
 if [ ${SCAN_ENABLED[tls_versions]} -eq 1 ] && check_tool curl && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
@@ -658,7 +657,7 @@ fi
 if [ ${SCAN_ENABLED[gobuster]} -eq 1 ] && check_tool gobuster; then
     echo -e "${YELLOW}[*] Phase 6: Directory Enumeration${NC}"
     # Try multiple wordlist paths for compatibility
-    local wordlist="/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"
+    wordlist="/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"
     if [ ! -f "$wordlist" ]; then
         wordlist="/usr/share/wordlists/dirb/common.txt"
     fi
@@ -666,7 +665,7 @@ if [ ${SCAN_ENABLED[gobuster]} -eq 1 ] && check_tool gobuster; then
         wordlist="/usr/share/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt"
     fi
     if [ -f "$wordlist" ]; then
-        run_scan "Gobuster directory scan" "gobuster dir -u $TARGET -w $wordlist -k -s 204,301,302,307,401,403 -q" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
+        run_scan "Gobuster directory scan" "gobuster dir -u $TARGET -w $wordlist -k -s 204,301,302,307,401,403" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
     else
         log_error "Gobuster directory scan" "No common wordlist found - install seclists or dirbuster"
     fi
