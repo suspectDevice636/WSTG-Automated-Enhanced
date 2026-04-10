@@ -631,7 +631,7 @@ fi
 # ===== DIRECTORY ENUMERATION =====
 if [ ${SCAN_ENABLED[gobuster]} -eq 1 ] && check_tool gobuster; then
     echo -e "${YELLOW}[*] Phase 6: Directory Enumeration${NC}"
-    run_scan "Gobuster directory scan" "gobuster dir -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u $TARGET -k -s \"204,301,302,307,401,403\" -b \"\"" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
+    run_scan "Gobuster directory scan" "gobuster dir -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u $TARGET -k -s "204,301,302,307,401,403" -b "" " "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
 fi
 
 # ===== PARAMETER FUZZING =====
