@@ -593,16 +593,16 @@ if [ ${SCAN_ENABLED[nikto]} -eq 1 ] && check_tool nikto; then
 fi
 
 if [ ${SCAN_ENABLED[whatweb]} -eq 1 ] && check_tool whatweb; then
-    run_scan "WhatWeb scan" "whatweb -v --no-ssl-verify $TARGET 2>&1" "$OUTPUT_DIR/web/02-whatweb-scan.txt"
+    run_scan "WhatWeb scan" "whatweb $TARGET" "$OUTPUT_DIR/web/02-whatweb-scan.txt"
 fi
 
 if [ ${SCAN_ENABLED[dirb_iis]} -eq 1 ] && check_tool dirb; then
-    run_scan "Dirb IIS scan" "dirb $TARGET /usr/share/wordlists/wfuzz/vulns/iis.txt -r -q 2>/dev/null" "$OUTPUT_DIR/web/03-dirb-iis.txt"
+    run_scan "Dirb IIS scan" "dirb $TARGET /usr/share/dirb/wordlists/vulns/iis.txt" "$OUTPUT_DIR/web/03-dirb-iis.txt"
 fi
 
 if [ ${SCAN_ENABLED[dirb_apache]} -eq 1 ] && check_tool dirb; then
     # Look for Apache-specific files and configurations (.htaccess, .htpasswd, etc.)
-    run_scan "Dirb Apache files scan" "dirb $TARGET /usr/share/wordlists/dirb/common.txt -r -q 2>/dev/null" "$OUTPUT_DIR/web/03-dirb-apache.txt"
+    run_scan "Dirb Apache files scan" "dirb $TARGET /usr/share/dirb/wordlists/vulns/apache.txt" "$OUTPUT_DIR/web/03-dirb-apache.txt"
 fi
 
 # ===== HEADER ANALYSIS =====
@@ -639,12 +639,8 @@ if [ ${SCAN_ENABLED[ssl_cert]} -eq 1 ] && check_tool openssl && ([ "$SCHEME" == 
     run_scan "SSL certificate info" "openssl s_client -connect $HOST:$PORT -servername $HOST < /dev/null 2>&1 | openssl x509 -text -noout" "$OUTPUT_DIR/ssl/01-cert-info.txt"
 fi
 
-if [ ${SCAN_ENABLED[ssl_scan]} -eq 1 ] && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
-    if check_tool sslscan; then
-        run_scan "SSL configuration scan (sslscan)" "timeout 60 sslscan --no-failed --no-preferred $HOST:$PORT 2>&1" "$OUTPUT_DIR/ssl/02-sslscan.txt"
-    elif check_tool openssl; then
-        run_scan "SSL configuration scan (openssl)" "echo 'QUIT' | timeout 30 openssl s_client -connect $HOST:$PORT -servername $HOST 2>&1 | head -100" "$OUTPUT_DIR/ssl/02-ssl-config.txt"
-    fi
+if [ ${SCAN_ENABLED[ssl_scan]} -eq 1 ] && check_tool sslscan && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
+    run_scan "SSL configuration scan (sslscan)" "sslscan $HOST:$PORT" "$OUTPUT_DIR/ssl/02-sslscan.txt"
 fi
 
 if [ ${SCAN_ENABLED[tls_versions]} -eq 1 ] && check_tool curl && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
@@ -656,19 +652,7 @@ fi
 # ===== DIRECTORY ENUMERATION =====
 if [ ${SCAN_ENABLED[gobuster]} -eq 1 ] && check_tool gobuster; then
     echo -e "${YELLOW}[*] Phase 6: Directory Enumeration${NC}"
-    # Try multiple wordlist paths for compatibility
-    wordlist="/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"
-    if [ ! -f "$wordlist" ]; then
-        wordlist="/usr/share/wordlists/dirb/common.txt"
-    fi
-    if [ ! -f "$wordlist" ]; then
-        wordlist="/usr/share/wordlists/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt"
-    fi
-    if [ -f "$wordlist" ]; then
-        run_scan "Gobuster directory scan" "gobuster dir -u $TARGET -w $wordlist -k -s 204,301,302,307,401,403" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
-    else
-        log_error "Gobuster directory scan" "No common wordlist found - install seclists or dirbuster"
-    fi
+    run_scan "Gobuster directory scan" "gobuster dir -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u $TARGET -k -s \"204,301,302,307,401,403\" -b \"\"" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
 fi
 
 # ===== PARAMETER FUZZING =====
