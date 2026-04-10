@@ -498,6 +498,7 @@ echo -e "${BLUE}============================================${NC}"
 echo -e "Target: ${GREEN}$TARGET${NC}"
 echo -e "Host: ${GREEN}$HOST${NC}"
 echo -e "Port: ${GREEN}$PORT${NC}"
+echo -e "Scheme: ${GREEN}$SCHEME${NC}"
 echo -e "Output: ${GREEN}$OUTPUT_DIR${NC}"
 echo -e "${BLUE}============================================${NC}\n"
 
