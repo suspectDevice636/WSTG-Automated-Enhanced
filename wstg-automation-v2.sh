@@ -458,11 +458,16 @@ handle_menu_input() {
 # Main script starts here
 # Extract host and port from URL
 HOST=$(echo "$TARGET" | sed -E 's|https?://||' | cut -d'/' -f1 | cut -d':' -f1)
-PORT=$(echo "$TARGET" | grep -oP '(?<=:)\d+' || echo "80")
+PORT=$(echo "$TARGET" | grep -oP '(?<=:)\d+' || echo "")
 SCHEME=$(echo "$TARGET" | grep -oP 'https?(?=://)')
 
-if [ "$SCHEME" == "https" ]; then
-    PORT=443
+# Only set default port if no explicit port in URL
+if [ -z "$PORT" ]; then
+    if [ "$SCHEME" == "https" ]; then
+        PORT=443
+    else
+        PORT=80
+    fi
 fi
 
 # Show legal notice first
