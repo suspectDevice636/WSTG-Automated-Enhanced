@@ -597,12 +597,21 @@ if [ ${SCAN_ENABLED[whatweb]} -eq 1 ] && check_tool whatweb; then
 fi
 
 if [ ${SCAN_ENABLED[dirb_iis]} -eq 1 ] && check_tool dirb; then
-    run_scan "Dirb IIS scan" "dirb '$TARGET' /usr/share/dirb/wordlists/vulns/iis.txt" "$OUTPUT_DIR/web/03-dirb-iis.txt"
+    # Add -S flag for HTTPS with self-signed certs
+    dirb_flags=""
+    if [ "$SCHEME" == "https" ]; then
+        dirb_flags="-S"
+    fi
+    run_scan "Dirb IIS scan" "dirb '$TARGET' /usr/share/dirb/wordlists/vulns/iis.txt $dirb_flags" "$OUTPUT_DIR/web/03-dirb-iis.txt"
 fi
 
 if [ ${SCAN_ENABLED[dirb_apache]} -eq 1 ] && check_tool dirb; then
     # Look for Apache-specific files and configurations (.htaccess, .htpasswd, etc.)
-    run_scan "Dirb Apache files scan" "dirb '$TARGET' /usr/share/dirb/wordlists/vulns/apache.txt" "$OUTPUT_DIR/web/03-dirb-apache.txt"
+    dirb_flags=""
+    if [ "$SCHEME" == "https" ]; then
+        dirb_flags="-S"
+    fi
+    run_scan "Dirb Apache files scan" "dirb '$TARGET' /usr/share/dirb/wordlists/vulns/apache.txt $dirb_flags" "$OUTPUT_DIR/web/03-dirb-apache.txt"
 fi
 
 # ===== HEADER ANALYSIS =====
