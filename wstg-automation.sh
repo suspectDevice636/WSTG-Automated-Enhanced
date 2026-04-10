@@ -435,7 +435,7 @@ fi
 echo -e "${YELLOW}[*] Phase 6: Directory Enumeration${NC}"
 
 if check_tool gobuster; then
-    run_scan "Gobuster directory scan" "gobuster dir -u $TARGET --wordlist /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt 2>&1 | grep -v '^$'" "$OUTPUT_DIR/web/02-gobuster-dirs.txt"
+    run_scan "Gobuster directory scan" "gobuster dir -u $TARGET -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -q" "$OUTPUT_DIR/web/02-gobuster-dirs.txt"
 fi
 
 # ===== PARAMETER FUZZING =====
