@@ -220,7 +220,12 @@ done
 
 # Cleanup function to kill all child processes on exit
 cleanup() {
-    echo -e "\n${YELLOW}[!] Interrupt received, killing all background scans...${NC}"
+    local exit_code=$?
+    # Only show interrupt message if actually interrupted (not normal exit)
+    if [ $exit_code -ne 0 ] || [ "$1" == "INT" ] || [ "$1" == "TERM" ]; then
+        echo -e "\n${YELLOW}[!] Interrupt received, killing all background scans...${NC}"
+        echo -e "${RED}[!] Scan cancelled${NC}"
+    fi
     # Kill all child processes more aggressively
     pkill -P $$ 2>/dev/null || true
     jobs -p | xargs -r kill -9 2>/dev/null || true
@@ -229,12 +234,12 @@ cleanup() {
     pkill -9 wfuzz 2>/dev/null || true
     pkill -9 nikto 2>/dev/null || true
     wait 2>/dev/null || true
-    echo -e "${RED}[!] Scan cancelled${NC}"
-    exit 130
 }
 
-# Set trap to catch Ctrl+C (SIGINT) and termination (SIGTERM)
-trap cleanup SIGINT SIGTERM EXIT
+# Set trap to catch Ctrl+C (SIGINT) and termination (SIGTERM) and normal exit
+trap 'cleanup INT' SIGINT
+trap 'cleanup TERM' SIGTERM
+trap 'cleanup' EXIT
 
 # Function to show spinner
 show_spinner() {
