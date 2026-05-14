@@ -157,16 +157,16 @@ BEFORE RUNNING:
    4. Follow responsible disclosure practices
 
 USAGE:
-   $0 <target_url> [-o output_directory]
+   $0 -t <target_url> [-o output_directory]
 
 OPTIONS:
-   <target_url>           Target URL (e.g., http://example.com)
+   -t <target_url>        Target URL (e.g., http://example.com)
    -o <output_directory>  Output directory for scan results (default: ./scans)
    -h, --help             Display this help message
 
 EXAMPLES:
-   $0 http://example.com
-   $0 http://example.com -o ./my-scans
+   $0 -t http://example.com
+   $0 -t http://example.com -o ./my-scans
    $0 -h
 
 MENU NAVIGATION:
@@ -188,37 +188,23 @@ EOF
     exit 0
 }
 
-# Check for help flag first
-for arg in "$@"; do
-    if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
-        show_help
-    fi
+OUTPUT_DIR="scans" # Default output directory
+
+while getopts "t:o:h" opt; do
+    case "$opt" in
+    t) TARGET="$OPTARG" ;;
+    o) OUTPUT_DIR="$OPTARG" ;;
+    h) show_help ;;
+    esac
 done
 
 # Check arguments
-if [ -z "$1" ]; then
-    echo -e "${RED}Usage: $0 <target_url> -o <output_directory>${NC}"
-    echo -e "${YELLOW}Example: $0 http://example.com -o ./scans${NC}"
+if [ $# -eq 0 ]; then
+    echo -e "${RED}Usage: $0 -t <target_url> -o <output_directory>${NC}"
+    echo -e "${YELLOW}Example: $0 -t http://example.com -o ./scans${NC}"
     echo -e "${CYAN}Run '$0 -h' for full help and disclaimer${NC}"
     exit 1
 fi
-
-TARGET="$1"
-OUTPUT_DIR="scans" # Default output directory
-
-# Parse optional arguments
-while [[ $# -gt 1 ]]; do
-    case "$2" in
-    -o)
-        OUTPUT_DIR="$3"
-        shift 2
-        ;;
-    *)
-        echo -e "${RED}Unknown option: $2${NC}"
-        exit 1
-        ;;
-    esac
-done
 
 # Cleanup function to kill all child processes on exit
 cleanup() {
