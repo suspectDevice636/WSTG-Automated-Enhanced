@@ -241,10 +241,10 @@ show_progress_bar() {
     local total=$2
     local percent=$((current * 100 / total))
     local filled=$((percent / 2))
+    local empty=$((50 - filled))
 
-    printf "[${BLUE}"
-    printf "%${filled}s" | tr ' ' '█'
-    printf "%$((50 - filled))s${NC}] ${CYAN}${current}/${total}${NC} "
+    # use echo -ne to handle parsing error at 100%
+    echo -ne "\r[${BLUE}$(printf "%${filled}s" | tr ' ' '█')$([ "$empty" -gt 0 ] && printf "%${empty}s" "")${NC}] ${CYAN}${current}/${total}${NC} "
 }
 
 # Function to extract error details from stderr
@@ -303,8 +303,9 @@ run_scan() {
     local output_file="$3"
     local temp_error_file=$(mktemp)
 
-    printf '%0.s ' {1..51}
+    printf '%0.s ' {1..52}
     printf " ${YELLOW}⟳ $command${NC} "
+    echo ""
 
     eval "$command" >"$output_file" 2>"$temp_error_file" &
     local cmd_pid=$!
@@ -586,23 +587,23 @@ if [ ${SCAN_ENABLED[nmap_service]} -eq 1 ] || [ ${SCAN_ENABLED[nmap_http_methods
 fi
 
 if [ ${SCAN_ENABLED[nmap_service]} -eq 1 ] && check_tool nmap; then
-    run_scan "Nmap Service Detection" "nmap -sV -Pn -oA $OUTPUT_DIR/nmap/01-nmap-service $HOST 2>&1 | tee $OUTPUT_DIR/nmap/01-nmap-service.txt" "$OUTPUT_DIR/nmap/01-nmap-service.txt"
+    run_scan "Nmap Service Detection" "nmap -sV -Pn -oA $OUTPUT_DIR/nmap/01-nmap-service $HOST 2>&1" "/dev/null"
 fi
 
 if [ ${SCAN_ENABLED[nmap_http_methods]} -eq 1 ] && check_tool nmap; then
-    run_scan "Nmap HTTP Methods" "nmap -sV -Pn --script http-methods -oA $OUTPUT_DIR/nmap/02-nmap-http-methods $HOST 2>&1 | tee $OUTPUT_DIR/nmap/02-nmap-http-methods.txt" "$OUTPUT_DIR/nmap/02-nmap-http-methods.txt"
+    run_scan "Nmap HTTP Methods" "nmap -sV -Pn --script http-methods -oA $OUTPUT_DIR/nmap/02-nmap-http-methods $HOST 2>&1" "/dev/null"
 fi
 
 if [ ${SCAN_ENABLED[nmap_tcp_all]} -eq 1 ] && check_tool nmap; then
-    run_scan "Nmap All Ports TCP" "nmap -p- -sS -Pn -oA $OUTPUT_DIR/nmap/03-nmap-tcp-all $HOST 2>&1 | tee $OUTPUT_DIR/nmap/03-nmap-tcp-all.txt" "$OUTPUT_DIR/nmap/03-nmap-tcp-all.txt"
+    run_scan "Nmap All Ports TCP" "nmap -p- -sS -Pn -oA $OUTPUT_DIR/nmap/03-nmap-tcp-all $HOST 2>&1" "/dev/null"
 fi
 
 if [ ${SCAN_ENABLED[nmap_udp_all]} -eq 1 ] && check_tool nmap; then
-    run_scan "Nmap All Ports UDP" "nmap -p- -sU -Pn -oA $OUTPUT_DIR/nmap/04-nmap-udp-all $HOST 2>&1 | tee $OUTPUT_DIR/nmap/04-nmap-udp-all.txt" "$OUTPUT_DIR/nmap/04-nmap-udp-all.txt"
+    run_scan "Nmap All Ports UDP" "nmap -p- -sU -Pn -oA $OUTPUT_DIR/nmap/04-nmap-udp-all $HOST 2>&1" "/dev/null"
 fi
 
 if [ ${SCAN_ENABLED[nmap_safe_scripts]} -eq 1 ] && check_tool nmap; then
-    run_scan "Nmap Safe Scripts" "nmap -sV -Pn --script=safe -oA $OUTPUT_DIR/nmap/05-nmap-safe-scripts $HOST 2>&1 | tee $OUTPUT_DIR/nmap/05-nmap-safe-scripts.txt" "$OUTPUT_DIR/nmap/05-nmap-safe-scripts.txt"
+    run_scan "Nmap Safe Scripts" "nmap -sV -Pn --script=safe -oA $OUTPUT_DIR/nmap/05-nmap-safe-scripts $HOST 2>&1" "/dev/null"
 fi
 
 # ===== WEB SERVER SCANNING =====
@@ -646,17 +647,23 @@ if [ ${SCAN_ENABLED[http_headers]} -eq 1 ] && check_tool curl; then
 fi
 
 if [ ${SCAN_ENABLED[security_headers]} -eq 1 ] && check_tool curl; then
-    run_scan "Security headers check" "{
-        echo '=== Security Header Checks ==='; echo '';
-        echo 'Testing: Strict-Transport-Security (HSTS)';
-        curl -I '$TARGET' 2>&1 | grep -i 'strict-transport|hsts' || echo '❌ HSTS not found';
-        echo ''; echo 'Testing: Content-Security-Policy (CSP)';
-        curl -I '$TARGET' 2>&1 | grep -i 'content-security-policy' || echo '❌ CSP not found';
-        echo ''; echo 'Testing: X-Content-Type-Options';
-        curl -I '$TARGET' 2>&1 | grep -i 'x-content-type-options' || echo '❌ X-Content-Type-Options not found';
-        echo ''; echo 'Testing: X-Frame-Options';
-        curl -I '$TARGET' 2>&1 | grep -i 'x-frame-options' || echo '❌ X-Frame-Options not found'; echo '';
-    }" "$OUTPUT_DIR/headers/02-security-headers-check.txt"
+    run_scan "Security headers check" "curl -I '$TARGET' 2>&1" "$OUTPUT_DIR/headers/curl.out"
+    {
+        echo '=== Security Header Checks ==='
+        echo ''
+        echo 'Testing: Strict-Transport-Security (HSTS)'
+        grep -i 'strict-transport|hsts' "$OUTPUT_DIR/headers/curl.out" || echo '❌ HSTS not found'
+        echo ''
+        echo 'Testing: Content-Security-Policy (CSP)'
+        grep -i 'content-security-policy' "$OUTPUT_DIR/headers/curl.out" || echo '❌ CSP not found'
+        echo ''
+        echo 'Testing: X-Content-Type-Options'
+        grep -i 'x-content-type-options' "$OUTPUT_DIR/headers/curl.out" || echo '❌ X-Content-Type-Options not found'
+        echo ''
+        echo 'Testing: X-Frame-Options'
+        grep -i 'x-frame-options' "$OUTPUT_DIR/headers/curl.out" || echo '❌ X-Frame-Options not found'
+        echo ''
+    } >"$OUTPUT_DIR/headers/02-security-headers-check.txt"
 fi
 
 # ===== SSL/TLS ANALYSIS =====
@@ -675,9 +682,7 @@ if [ ${SCAN_ENABLED[ssl_scan]} -eq 1 ] && check_tool sslscan && ([ "$SCHEME" == 
 fi
 
 if [ ${SCAN_ENABLED[tls_versions]} -eq 1 ] && check_tool curl && ([ "$SCHEME" == "https" ] || [ "$PORT" == "443" ]); then
-    run_scan "TLS v1.0 support" "curl -I -k --tlsv1.0 $TARGET" "$OUTPUT_DIR/ssl/03-tls-v1.0.txt"
-    run_scan "TLS v1.1 support" "curl -I -k --tlsv1.1 $TARGET" "$OUTPUT_DIR/ssl/04-tls-v1.1.txt"
-    run_scan "TLS v1.2 support" "curl -I -k --tlsv1.2 $TARGET" "$OUTPUT_DIR/ssl/05-tls-v1.2.txt"
+    run_scan "TLS v1.0-2 support" 'for version in 0 1 2; do curl -I -k --tlsv1."$version" $TARGET > $OUTPUT_DIR/ssl/03-tls-v1."$version".txt; done' "/dev/null"
 fi
 
 # ===== DIRECTORY ENUMERATION =====
@@ -698,7 +703,7 @@ if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] || [ ${SCAN_ENABLED[robots_txt]} -eq 1
 fi
 
 if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] && check_tool curl; then
-    run_scan "Directory listing check" "curl -s $TARGET/ > $OUTPUT_DIR/web/05-dir-listing-check.txt 2>&1 && grep -i 'index of|directory listing' $OUTPUT_DIR/web/05-dir-listing-check.txt > /dev/null && echo 'VULNERABLE: Directory listing detected' || echo 'OK: No directory listing'" "$OUTPUT_DIR/web/05-dir-listing-check.txt"
+    run_scan "Directory listing check" "curl -s $TARGET/ -o /tmp/dir-listing-check.tmp 2>&1 && { grep -qi 'index of\|directory listing' /tmp/dir-listing-check.tmp && echo 'VULNERABLE: Directory listing detected' || echo 'OK: No directory listing'; }" "$OUTPUT_DIR/web/05-dir-listing-check.txt"
 fi
 
 if [ ${SCAN_ENABLED[robots_txt]} -eq 1 ] && check_tool curl; then
