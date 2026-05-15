@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -uo pipefail
+
 #########################################
 # WSTG Automated Scanner (v2 - Interactive)
 # VERSION: 2.0.0
@@ -52,7 +54,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Spinner frames - pure ASCII for maximum compatibility
-SPINNER=( '/' '-' '\' '|' )
+SPINNER=('/' '-' '\' '|')
 SPINNER_IDX=0
 
 # Error tracking
@@ -125,7 +127,7 @@ done
 
 # Function to display help and disclaimer
 show_help() {
-    cat << EOF
+    cat <<EOF
 ========================================
 WSTG Automated Security Scanner v2.0.0
 (Interactive Menu - Selective Scanning)
@@ -202,19 +204,19 @@ if [ -z "$1" ]; then
 fi
 
 TARGET="$1"
-OUTPUT_DIR="scans"  # Default output directory
+OUTPUT_DIR="scans" # Default output directory
 
 # Parse optional arguments
 while [[ $# -gt 1 ]]; do
     case "$2" in
-        -o)
-            OUTPUT_DIR="$3"
-            shift 2
-            ;;
-        *)
-            echo -e "${RED}Unknown option: $2${NC}"
-            exit 1
-            ;;
+    -o)
+        OUTPUT_DIR="$3"
+        shift 2
+        ;;
+    *)
+        echo -e "${RED}Unknown option: $2${NC}"
+        exit 1
+        ;;
     esac
 done
 
@@ -244,7 +246,7 @@ trap 'cleanup' EXIT
 # Function to show spinner
 show_spinner() {
     printf "\r${CYAN}[${SPINNER[$SPINNER_IDX]}]${NC}" >&1
-    SPINNER_IDX=$(( (SPINNER_IDX + 1) % ${#SPINNER[@]} ))
+    SPINNER_IDX=$(((SPINNER_IDX + 1) % ${#SPINNER[@]}))
 }
 
 # Function to show progress bar
@@ -288,8 +290,8 @@ log_error() {
     local scan_name="$1"
     local error_msg="$2"
     FAILED_SCANS+=("$scan_name: $error_msg")
-    ((FAILED_SCANS_COUNT++))
-    printf "\r\033[K"  # Clear line completely
+    FAILED_SCANS_COUNT=$((FAILED_SCANS_COUNT + 1))
+    printf "\r\033[K" # Clear line completely
     echo -e "${RED}✗ FAILED: $scan_name${NC}"
     echo -e "  ${RED}└─ $error_msg${NC}"
 }
@@ -297,10 +299,10 @@ log_error() {
 # Function to log success
 log_success() {
     local scan_name="$1"
-    ((PASSED_SCANS++))
+    PASSED_SCANS=$((PASSED_SCANS + 1))
     printf "\r"
     echo -e "${GREEN}✓ $scan_name${NC}"
-    ((CURRENT_SCAN++))
+    CURRENT_SCAN=$((CURRENT_SCAN + 1))
     show_progress_bar $CURRENT_SCAN $TOTAL_SCANS
     echo ""
 }
@@ -315,7 +317,7 @@ run_scan() {
     show_progress_bar $CURRENT_SCAN $TOTAL_SCANS
     printf " ${YELLOW}⟳ $scan_name${NC} "
 
-    eval "$command" > "$output_file" 2>"$temp_error_file" &
+    eval "$command" >"$output_file" 2>"$temp_error_file" &
     local cmd_pid=$!
 
     while kill -0 $cmd_pid 2>/dev/null; do
@@ -328,22 +330,20 @@ run_scan() {
 
     printf "\r"
 
-    local has_output=false
     local has_error=false
     local error_msg=""
 
-    [ -s "$output_file" ] && has_output=true
     [ -s "$temp_error_file" ] && has_error=true
 
-    if [ "$has_output" = true ]; then
-        log_success "$scan_name"
-    elif [ "$has_error" = true ]; then
-        error_msg=$(extract_error "$(cat "$temp_error_file")")
-        log_error "$scan_name" "$error_msg"
-    elif [ $exit_code -eq 0 ]; then
+    if [ $exit_code -eq 0 ]; then
         log_success "$scan_name"
     else
-        log_error "$scan_name" "Tool produced no output (exit code $exit_code)"
+        if [ "$has_error" = true ]; then
+            error_msg=$(extract_error "$(cat "$temp_error_file")")
+        else
+            error_msg="Tool failed with exit code $exit_code"
+        fi
+        log_error "$scan_name" "$error_msg"
     fi
     rm -f "$temp_error_file"
 }
@@ -351,7 +351,7 @@ run_scan() {
 # Function to check if tool exists
 check_tool() {
     local tool="$1"
-    if ! command -v "$tool" &> /dev/null; then
+    if ! command -v "$tool" &>/dev/null; then
         return 1
     fi
     return 0
@@ -385,7 +385,7 @@ display_menu() {
         else
             printf "  ${color}%s %-40s${NC}\n" "$checkbox" "${SCANS[$scan]}"
         fi
-        ((idx++))
+        idx=$((idx + 1))
     done
 
     echo ""
@@ -399,7 +399,7 @@ display_menu() {
     # Count enabled scans
     local enabled_count=0
     for scan in "${SCAN_ORDER[@]}"; do
-        [ ${SCAN_ENABLED[$scan]} -eq 1 ] && ((enabled_count++))
+        [ ${SCAN_ENABLED[$scan]} -eq 1 ] && enabled_count=$((enabled_count + 1))
     done
 
     echo -e "${YELLOW}Scans enabled: $enabled_count / ${#SCAN_ORDER[@]}${NC}"
@@ -420,24 +420,24 @@ handle_menu_input() {
             IFS= read -rsn2 arrow_key
 
             case "$arrow_key" in
-                '[A') # Up arrow
-                    if [ $current_idx -gt 0 ]; then
-                        ((current_idx--))
-                    fi
-                    ;;
-                '[B') # Down arrow
-                    if [ $current_idx -lt $((${#SCAN_ORDER[@]} - 1)) ]; then
-                        ((current_idx++))
-                    fi
-                    ;;
-                '[C') # Right arrow - toggle ON
-                    local scan=${SCAN_ORDER[$current_idx]}
-                    SCAN_ENABLED[$scan]=1
-                    ;;
-                '[D') # Left arrow - toggle OFF
-                    local scan=${SCAN_ORDER[$current_idx]}
-                    SCAN_ENABLED[$scan]=0
-                    ;;
+            '[A') # Up arrow
+                if [ $current_idx -gt 0 ]; then
+                    ((current_idx--))
+                fi
+                ;;
+            '[B') # Down arrow
+                if [ $current_idx -lt $((${#SCAN_ORDER[@]} - 1)) ]; then
+                    current_idx=$((current_idx + 1))
+                fi
+                ;;
+            '[C') # Right arrow - toggle ON
+                local scan=${SCAN_ORDER[$current_idx]}
+                SCAN_ENABLED[$scan]=1
+                ;;
+            '[D') # Left arrow - toggle OFF
+                local scan=${SCAN_ORDER[$current_idx]}
+                SCAN_ENABLED[$scan]=0
+                ;;
             esac
         elif [ "$key" = "q" ] || [ "$key" = "Q" ]; then
             # Quit
@@ -447,7 +447,7 @@ handle_menu_input() {
             # Empty string means Enter was pressed (newline)
             local enabled_count=0
             for scan in "${SCAN_ORDER[@]}"; do
-                [ ${SCAN_ENABLED[$scan]} -eq 1 ] && ((enabled_count++))
+                [ ${SCAN_ENABLED[$scan]} -eq 1 ] && enabled_count=$((enabled_count + 1))
             done
 
             if [ $enabled_count -gt 0 ]; then
@@ -542,7 +542,7 @@ done
 TOTAL_SCANS=0
 for scan in "${SCAN_ORDER[@]}"; do
     if [ ${SCAN_ENABLED[$scan]} -eq 1 ]; then
-        ((TOTAL_SCANS++))
+        TOTAL_SCANS=$((TOTAL_SCANS + 1))
     fi
 done
 
@@ -692,7 +692,7 @@ echo -e "${YELLOW}[*] Phase 8: Common Vulnerability Patterns${NC}"
 
 # ===== DIRECTORY & FILE CHECKS =====
 if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] || [ ${SCAN_ENABLED[robots_txt]} -eq 1 ] || [ ${SCAN_ENABLED[sitemap]} -eq 1 ] || [ ${SCAN_ENABLED[git_exposure]} -eq 1 ] || [ ${SCAN_ENABLED[backup_files]} -eq 1 ]; then
-    true  # Phase already declared above
+    true # Phase already declared above
 fi
 
 if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] && check_tool curl; then
@@ -787,7 +787,7 @@ echo -e "  3. Manual testing for business logic and context-specific vulns"
 echo -e "  4. Run Burp Suite for interactive testing\n"
 
 # Create a summary report
-cat > "$OUTPUT_DIR/SCAN-SUMMARY.txt" << EOF
+cat >"$OUTPUT_DIR/SCAN-SUMMARY.txt" <<EOF
 WSTG Automated Scan Report (v${VERSION})
 ==========================
 
@@ -808,13 +808,13 @@ EOF
 
 for scan in "${SCAN_ORDER[@]}"; do
     if [ ${SCAN_ENABLED[$scan]} -eq 1 ]; then
-        echo "✓ ${SCANS[$scan]}" >> "$OUTPUT_DIR/SCAN-SUMMARY.txt"
+        echo "✓ ${SCANS[$scan]}" >>"$OUTPUT_DIR/SCAN-SUMMARY.txt"
     else
-        echo "○ ${SCANS[$scan]} (skipped)" >> "$OUTPUT_DIR/SCAN-SUMMARY.txt"
+        echo "○ ${SCANS[$scan]} (skipped)" >>"$OUTPUT_DIR/SCAN-SUMMARY.txt"
     fi
 done
 
-cat >> "$OUTPUT_DIR/SCAN-SUMMARY.txt" << EOF
+cat >>"$OUTPUT_DIR/SCAN-SUMMARY.txt" <<EOF
 
 FILES GENERATED:
 $(find "$OUTPUT_DIR" -type f ! -name "SCAN-SUMMARY.txt" | sort | sed 's|^|  - |')
