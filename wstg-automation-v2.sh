@@ -224,7 +224,7 @@ done
 cleanup() {
     local exit_code=$?
     # Only show interrupt message if actually interrupted (not normal exit)
-    if [ $exit_code -ne 0 ] || [ "$1" == "INT" ] || [ "$1" == "TERM" ]; then
+    if [ $exit_code -ne 0 ] || [ "${1:-}" == "INT" ] || [ "${1:-}" == "TERM" ]; then
         echo -e "\n${YELLOW}[!] Interrupt received, killing all background scans...${NC}"
         echo -e "${RED}[!] Scan cancelled${NC}"
     fi
@@ -496,6 +496,22 @@ fi
 
 # Display scan selection menu
 handle_menu_input
+
+# Check root requirement for privileged nmap scans
+if [ ${SCAN_ENABLED[nmap_tcp_all]} -eq 1 ] || [ ${SCAN_ENABLED[nmap_udp_all]} -eq 1 ]; then
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "${YELLOW}[!] Nmap TCP SYN and UDP scans require root privileges.${NC}"
+        echo -n "Re-run with sudo now? (yes/no): "
+        read -r sudo_check
+        if [[ "$sudo_check" =~ ^[Yy][Ee][Ss]$ ]]; then
+            exec sudo "$0" "$@"
+        else
+            echo -e "${YELLOW}[!] Disabling privileged scans and continuing...${NC}"
+            SCAN_ENABLED[nmap_tcp_all]=0
+            SCAN_ENABLED[nmap_udp_all]=0
+        fi
+    fi
+fi
 
 echo -e "\n${BLUE}============================================${NC}"
 echo -e "${BLUE}WSTG Automated Scanner v${VERSION}${NC}"
