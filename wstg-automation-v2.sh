@@ -240,11 +240,11 @@ show_progress_bar() {
     local current=$1
     local total=$2
     local percent=$((current * 100 / total))
-    local filled=$((percent / 5))
+    local filled=$((percent / 2))
 
     printf "[${BLUE}"
     printf "%${filled}s" | tr ' ' '█'
-    printf "%$((20 - filled))s${NC}] ${CYAN}${current}/${total}${NC} "
+    printf "%$((50 - filled))s${NC}] ${CYAN}${current}/${total}${NC} "
 }
 
 # Function to extract error details from stderr
@@ -273,13 +273,16 @@ extract_error() {
 
 # Function to log errors with detailed messages
 log_error() {
-    local scan_name="$1"
+    local command="$1"
     local error_msg="$2"
-    FAILED_SCANS+=("$scan_name: $error_msg")
+    FAILED_SCANS+=("$command: $error_msg")
     FAILED_SCANS_COUNT=$((FAILED_SCANS_COUNT + 1))
     printf "\r\033[K" # Clear line completely
-    echo -e "${RED}✗ FAILED: $scan_name${NC}"
+    echo -e "${RED}✗ FAILED: $command${NC}"
     echo -e "  ${RED}└─ $error_msg${NC}"
+    CURRENT_SCAN=$((CURRENT_SCAN + 1))
+    show_progress_bar $CURRENT_SCAN $TOTAL_SCANS
+    echo ""
 }
 
 # Function to log success
@@ -300,8 +303,8 @@ run_scan() {
     local output_file="$3"
     local temp_error_file=$(mktemp)
 
-    show_progress_bar $CURRENT_SCAN $TOTAL_SCANS
-    printf " ${YELLOW}⟳ $scan_name${NC} "
+    printf '%0.s ' {1..51}
+    printf " ${YELLOW}⟳ $command${NC} "
 
     eval "$command" >"$output_file" 2>"$temp_error_file" &
     local cmd_pid=$!
@@ -329,19 +332,13 @@ run_scan() {
         else
             error_msg="Tool failed with exit code $exit_code"
         fi
-        log_error "$scan_name" "$error_msg"
+        log_error "$command" "$error_msg"
     fi
     rm -f "$temp_error_file"
 }
 
 # Function to check if tool exists
-check_tool() {
-    local tool="$1"
-    if ! command -v "$tool" &>/dev/null; then
-        return 1
-    fi
-    return 0
-}
+check_tool() { command -v "$1" &>/dev/null; }
 
 # Function to display interactive menu
 display_menu() {
@@ -499,6 +496,12 @@ if [ ${SCAN_ENABLED[nmap_tcp_all]} -eq 1 ] || [ ${SCAN_ENABLED[nmap_udp_all]} -e
     fi
 fi
 
+if [ "$SCHEME" != "https" ]; then
+    SCAN_ENABLED[ssl_cert]=0
+    SCAN_ENABLED[ssl_scan]=0
+    SCAN_ENABLED[tls_versions]=0
+fi
+
 echo -e "\n${BLUE}============================================${NC}"
 echo -e "${BLUE}WSTG Automated Scanner v${VERSION}${NC}"
 echo -e "${BLUE}============================================${NC}"
@@ -515,7 +518,7 @@ mkdir -p "$OUTPUT_DIR"/{recon,web,ssl,headers,fuzzing,nmap,logs}
 # Check for required tools
 echo -e "${YELLOW}[*] Checking for required tools...${NC}\n"
 CRITICAL_TOOLS=(curl nmap)
-OPTIONAL_TOOLS=(nikto gobuster wfuzz dig dnsrecon whois host openssl sslscan whatweb dirb nmap)
+OPTIONAL_TOOLS=(nikto gobuster wfuzz dig dnsrecon whois host openssl sslscan whatweb dirb)
 MISSING_CRITICAL=0
 
 for tool in "${CRITICAL_TOOLS[@]}"; do
@@ -574,7 +577,7 @@ if [ ${SCAN_ENABLED[whois]} -eq 1 ] && check_tool whois; then
 fi
 
 if [ ${SCAN_ENABLED[reverse_dns]} -eq 1 ] && check_tool host; then
-    run_scan "Reverse DNS" "host $HOST" "$OUTPUT_DIR/recon/04-reverse-dns.txt"
+    run_scan "Reverse DNS" "host $HOST" "$OUTPUT_DIR/recon/06-reverse-dns.txt"
 fi
 
 # ===== PORT SCANNING =====
@@ -689,12 +692,9 @@ if [ ${SCAN_ENABLED[wfuzz]} -eq 1 ] && check_tool wfuzz; then
     run_scan "Parameter fuzzing (GET)" "wfuzz -c -z file,/usr/share/wordlists/wfuzz/general/common.txt -u $TARGET?FUZZ=test --hc 404" "$OUTPUT_DIR/fuzzing/01-get-params.txt"
 fi
 
-# ===== VULNERABILITY CHECKS =====
-echo -e "${YELLOW}[*] Phase 8: Common Vulnerability Patterns${NC}"
-
 # ===== DIRECTORY & FILE CHECKS =====
 if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] || [ ${SCAN_ENABLED[robots_txt]} -eq 1 ] || [ ${SCAN_ENABLED[sitemap]} -eq 1 ] || [ ${SCAN_ENABLED[git_exposure]} -eq 1 ] || [ ${SCAN_ENABLED[backup_files]} -eq 1 ]; then
-    true # Phase already declared above
+    echo -e "${YELLOW}[*] Phase 8: Common Vulnerability Patterns${NC}"
 fi
 
 if [ ${SCAN_ENABLED[dir_listing]} -eq 1 ] && check_tool curl; then
@@ -714,9 +714,7 @@ if [ ${SCAN_ENABLED[git_exposure]} -eq 1 ] && check_tool curl; then
 fi
 
 if [ ${SCAN_ENABLED[backup_files]} -eq 1 ] && check_tool curl; then
-    for ext in .bak .backup .old .swp .tmp; do
-        run_scan "Backup check (index.php$ext)" "curl -s $TARGET/index.php$ext" "$OUTPUT_DIR/web/09-backup-$ext.txt"
-    done
+    run_scan "Backup check (index.php)" 'for ext in bak backup old swp tmp; do curl -s $TARGET/index.php."$ext" -o $OUTPUT_DIR/web/09-backup-"$ext".txt; done' "/dev/null"
 fi
 
 # ===== ADVANCED CHECKS =====
