@@ -304,8 +304,7 @@ run_scan() {
     local temp_error_file=$(mktemp)
 
     printf '%0.s ' {1..52}
-    printf " ${YELLOW}⟳ $command${NC} "
-    echo ""
+    printf " ${YELLOW}⟳ $scan_name${NC} "
 
     eval "$command" >"$output_file" 2>"$temp_error_file" &
     local cmd_pid=$!
