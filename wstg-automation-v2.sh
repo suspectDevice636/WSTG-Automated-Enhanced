@@ -157,11 +157,12 @@ BEFORE RUNNING:
    4. Follow responsible disclosure practices
 
 USAGE:
-   $0 -t <target_url> [-o output_directory]
+   $0 -t <target_url> [-o output_directory] [-p proxy_url]
 
 OPTIONS:
    -t <target_url>        Target URL (e.g., http://example.com)
    -o <output_directory>  Output directory for scan results (default: ./scans)
+   -p <proxy>             Proxy (e.g., http://localhost:8080)
    -h, --help             Display this help message
 
 EXAMPLES:
@@ -189,11 +190,13 @@ EOF
 }
 
 OUTPUT_DIR="scans" # Default output directory
+PROXY=""
 
-while getopts "t:o:h" opt; do
+while getopts "t:o:p:h" opt; do
     case "$opt" in
     t) TARGET="$OPTARG" ;;
     o) OUTPUT_DIR="$OPTARG" ;;
+    p) PROXY="$OPTARG" ;;
     h) show_help ;;
     esac
 done
@@ -446,6 +449,21 @@ handle_menu_input() {
     done
 }
 
+proxy_flag() {
+    local tool="$1"
+    [ -z "$PROXY" ] && return
+    # Extract host and port from URL
+    local proxy_host=$(echo "$PROXY" | sed -E 's|https?://||' | cut -d'/' -f1 | cut -d':' -f1)
+    local proxy_port=$(echo "$PROXY" | grep -oP '(?<=:)\d+' || echo "")
+    case "$tool" in
+    nikto) echo "-useproxy $PROXY" ;;
+    gobuster) echo "--proxy $PROXY" ;;
+    wfuzz) echo "-p $proxy_host:$proxy_port" ;;
+    dirb) echo "-p $proxy_host:$proxy_port" ;;
+    whatweb) echo "--proxy $proxy_host:$proxy_port" ;;
+    esac
+}
+
 # Main script starts here
 # Extract host and port from URL
 HOST=$(echo "$TARGET" | sed -E 's|https?://||' | cut -d'/' -f1 | cut -d':' -f1)
@@ -506,6 +524,7 @@ echo -e "Target: ${GREEN}$TARGET${NC}"
 echo -e "Host: ${GREEN}$HOST${NC}"
 echo -e "Port: ${GREEN}$PORT${NC}"
 echo -e "Scheme: ${GREEN}$SCHEME${NC}"
+echo -e "Proxy: ${GREEN}$PROXY${NC}"
 echo -e "Output: ${GREEN}$OUTPUT_DIR${NC}"
 echo -e "${BLUE}============================================${NC}\n"
 
@@ -608,11 +627,11 @@ if [ ${SCAN_ENABLED[nikto]} -eq 1 ] || [ ${SCAN_ENABLED[whatweb]} -eq 1 ] || [ $
 fi
 
 if [ ${SCAN_ENABLED[nikto]} -eq 1 ] && check_tool nikto; then
-    run_scan "Nikto scan" "nikto -h $TARGET" "$OUTPUT_DIR/web/01-nikto-scan.txt"
+    run_scan "Nikto scan" "nikto -h $TARGET $(proxy_flag nikto)" "$OUTPUT_DIR/web/01-nikto-scan.txt"
 fi
 
 if [ ${SCAN_ENABLED[whatweb]} -eq 1 ] && check_tool whatweb; then
-    run_scan "WhatWeb scan" "whatweb $TARGET" "$OUTPUT_DIR/web/02-whatweb-scan.txt"
+    run_scan "WhatWeb scan" "whatweb $TARGET $(proxy_flag whatweb)" "$OUTPUT_DIR/web/02-whatweb-scan.txt"
 fi
 
 if [ ${SCAN_ENABLED[dirb_iis]} -eq 1 ] && check_tool dirb; then
@@ -621,7 +640,7 @@ if [ ${SCAN_ENABLED[dirb_iis]} -eq 1 ] && check_tool dirb; then
     if [ "$SCHEME" == "https" ]; then
         dirb_flags="-S"
     fi
-    run_scan "Dirb IIS scan" "dirb '$TARGET' /usr/share/dirb/wordlists/vulns/iis.txt $dirb_flags" "$OUTPUT_DIR/web/03-dirb-iis.txt"
+    run_scan "Dirb IIS scan" "dirb '$TARGET' /usr/share/dirb/wordlists/vulns/iis.txt $dirb_flags $(proxy_flag dirb)" "$OUTPUT_DIR/web/03-dirb-iis.txt"
 fi
 
 if [ ${SCAN_ENABLED[dirb_apache]} -eq 1 ] && check_tool dirb; then
@@ -630,7 +649,7 @@ if [ ${SCAN_ENABLED[dirb_apache]} -eq 1 ] && check_tool dirb; then
     if [ "$SCHEME" == "https" ]; then
         dirb_flags="-S"
     fi
-    run_scan "Dirb Apache files scan" "dirb '$TARGET' /usr/share/dirb/wordlists/vulns/apache.txt $dirb_flags" "$OUTPUT_DIR/web/03-dirb-apache.txt"
+    run_scan "Dirb Apache files scan" "dirb '$TARGET' /usr/share/dirb/wordlists/vulns/apache.txt $dirb_flags $(proxy_flag dirb)" "$OUTPUT_DIR/web/03-dirb-apache.txt"
 fi
 
 # ===== HEADER ANALYSIS =====
@@ -680,13 +699,13 @@ fi
 # ===== DIRECTORY ENUMERATION =====
 if [ ${SCAN_ENABLED[gobuster]} -eq 1 ] && check_tool gobuster; then
     echo -e "${YELLOW}[*] Phase 6: Directory Enumeration${NC}"
-    run_scan "Gobuster directory scan" "gobuster dir -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u '$TARGET' -k -s '204,301,302,307,401,403' -b ''" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
+    run_scan "Gobuster directory scan" "gobuster dir -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u '$TARGET' -k -s '204,301,302,307,401,403' -b '' $(proxy_flag gobuster)" "$OUTPUT_DIR/web/04-gobuster-dirs.txt"
 fi
 
 # ===== PARAMETER FUZZING =====
 if [ ${SCAN_ENABLED[wfuzz]} -eq 1 ] && check_tool wfuzz; then
     echo -e "${YELLOW}[*] Phase 7: Parameter Fuzzing${NC}"
-    run_scan "Parameter fuzzing (GET)" "wfuzz -c -z file,/usr/share/wordlists/wfuzz/general/common.txt -u $TARGET?FUZZ=test --hc 404" "$OUTPUT_DIR/fuzzing/01-get-params.txt"
+    run_scan "Parameter fuzzing (GET)" "wfuzz -c -z file,/usr/share/wordlists/wfuzz/general/common.txt -u $TARGET?FUZZ=test --hc 404 $(proxy_flag wfuzz)" "$OUTPUT_DIR/fuzzing/01-get-params.txt"
 fi
 
 # ===== VULNERABILITY CHECKS =====
@@ -796,6 +815,8 @@ WSTG Automated Scan Report (v${VERSION})
 Target: $TARGET
 Host: $HOST
 Port: $PORT
+Scheme: $SCHEME
+Proxy: $PROXY
 Scan Date: $(date)
 Version: $VERSION
 
